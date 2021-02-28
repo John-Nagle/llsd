@@ -6,6 +6,11 @@
 //  February, 2021.
 //  License: LGPL.
 //
+//
+//  Modules
+//
+pub mod xml;
+//
 use std::collections::HashMap;
 //
 //  The main primitive data item
