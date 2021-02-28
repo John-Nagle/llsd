@@ -11,7 +11,7 @@ use std::collections::HashMap;
 //  The main primitive data item
 //
 #[derive(Debug, Clone, PartialEq)]
-pub enum JsonValue {
+pub enum LLSDValue {
     Null,
     Boolean(bool),
     Real(f64),
@@ -20,8 +20,8 @@ pub enum JsonValue {
     Date(i64),
     URI(String),
     Binary(Vec<u8>),
-    Map(HashMap<String,JsonValue>),
-    Array(Vec<JsonValue>),
+    Map(HashMap<String,LLSDValue>),
+    Array(Vec<LLSDValue>),
 }
 
 #[cfg(test)]
