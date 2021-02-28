@@ -76,6 +76,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                 }
             },
             Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::End(ref e)) => println!("End <{:?}>", std::str::from_utf8(e.name())),
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
             Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
             _ => (), // There are several other `Event`s we do not consider here
