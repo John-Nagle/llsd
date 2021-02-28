@@ -1,4 +1,4 @@
-//  
+//
 //  Library for serializing and de-serializing data in
 //  Linden Lab Structured Data format.
 //
@@ -20,12 +20,12 @@ pub enum LLSDValue {
     Null,
     Boolean(bool),
     Real(f64),
-    UUID([u8;16]),
+    UUID([u8; 16]),
     String(String),
     Date(i64),
     URI(String),
     Binary(Vec<u8>),
-    Map(HashMap<String,LLSDValue>),
+    Map(HashMap<String, LLSDValue>),
     Array(Vec<LLSDValue>),
 }
 
