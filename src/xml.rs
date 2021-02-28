@@ -59,16 +59,20 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut buf = Vec::new();
 
     // The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
-    println!("Entering XML parse loop"); // ***TEMP***
     loop {
-        println!("In XML parse loop"); // ***TEMP***
+        ////println!("In XML parse loop"); // ***TEMP***
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 match e.name() {
                     b"tag1" => println!("attributes values: {:?}",
                                     e.attributes().map(|a| a.unwrap().value).collect::<Vec<_>>()),
                     b"tag2" => count += 1,
-                    _ => (),
+                    _ => {
+                        println!("<{:?}> attributes values: {:?} text: {:?}",
+                        std::str::from_utf8(e.name()),
+                        e.attributes().map(|a| a.unwrap().value).collect::<Vec<_>>(), txt); // ***TEMP***
+                        txt.clear();
+                    }
                 }
             },
             Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader).unwrap()),
