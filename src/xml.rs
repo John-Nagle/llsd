@@ -11,14 +11,19 @@
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
+use quick_xml::events::attributes::Attributes;  
 use quick_xml::Reader;
 use std::collections::HashMap;
 use uuid;
+use hex;
+use base64;
+use ascii85;
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut reader = Reader::from_str(xmlstr);
     reader.trim_text(true); // do not want trailing blanks
+    reader.expand_empty_elements(true); // want end tag events always
     let mut txt = Vec::new();
     let mut buf = Vec::new();
     //  Outer parse. Find <llsd> and parse its interior.
@@ -31,7 +36,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                         match reader.read_event(&mut buf) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
-                                let v = parse_value(&mut reader, tagname)?; // parse next value
+                                let v = parse_value(&mut reader, tagname, &e.attributes())?; // parse next value
                                 return Ok(v); // return key value pair
                             }
                             _ => {
@@ -52,7 +57,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                     }
                 }
             }
-            Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => println!("End <{:?}>", std::str::from_utf8(e.name())),
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
             Err(e) => {
@@ -72,11 +77,11 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
+fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
         "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" | "date" => {
-            parse_primitive_value(reader, starttag)
+            parse_primitive_value(reader, starttag, attrs)
         }
         "map" => parse_map(reader),
         "array" => parse_array(reader),
@@ -89,13 +94,13 @@ fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, 
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
+fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
     //  Entered with a start tag already parsed and in starttag
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
-            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 println!("End <{:?}>", tagname);
@@ -108,6 +113,7 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                 };
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" "); // combine into one big string
+                texts.clear();
                 //   TODO: 
                 //  1. Allow numeric values in "bool" fields.
                 //  2. Parse ISO dates.
@@ -131,6 +137,7 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                     "uuid" => Ok(LLSDValue::UUID(
                         *uuid::Uuid::parse_str(text.trim())?.as_bytes())),
                     "date" => Ok(LLSDValue::Date(text.parse::<i64>()?)),
+                    "binary" => Ok(LLSDValue::Binary(parse_binary(&text, attrs)?)),
                     _ => Err(anyhow!(
                         "Unexpected primitive data type <{}> at position {}",
                         starttag,
@@ -184,7 +191,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     }
                 }
             }
-            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?)),
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. No text expected.
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
@@ -230,7 +237,7 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
             }
-            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. Should be </key>
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
@@ -243,7 +250,7 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                 match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref e)) => {
                         let tagname = std::str::from_utf8(e.name())?; // tag name as string
-                        let v = parse_value(reader, tagname)?; // parse next value
+                        let v = parse_value(reader, tagname, &e.attributes())?; // parse next value
                         return Ok((k, v)); // return key value pair
                     }
                     _ => {
@@ -280,6 +287,29 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
 /// Parse one LLSD object. Recursive.
 fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with an <array> tag just parsed.
+    Err(anyhow!("Unimplemented"))
+}
+
+/// Parse binary object.
+/// Input in base64.
+fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
+    // "Parsers must support base64 encoding. Parsers may support base16 and base85."
+    //  ***NEED TO MAKE UNWRAP SAFE HERE***
+    let encoding  = match attrs.find(|k| k.unwrap().key == b"encoding") {
+        Some(enc) => std::str::from_utf8(&enc?.value)?,   // specified encoding
+        None => "base64"    // default
+    };
+    //  Decode appropriately.
+    Ok(match encoding {
+        "base64" => base64::decode(s)?,
+        "base16" => hex::decode(s)?,
+        "base85" => ascii85::decode(&s)?,
+        _ => return Err(anyhow!("Unknown binary encoding: {}", encoding))
+    })
+}
+
+/// Parse ISO 9660 date, simple form.
+fn parse_date(s: &str) -> Result<LLSDValue, Error> {
     Err(anyhow!("Unimplemented"))
 }
 
