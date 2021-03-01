@@ -130,6 +130,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                 let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
                 println!("End <{:?}>", tagname);
                 if "map" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname)) };
+                return Ok(LLSDValue::Map(map))                                // done, valid result
             },     
             Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
             Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
