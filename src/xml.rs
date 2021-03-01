@@ -55,11 +55,21 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     return Err(anyhow!("Unexpected end of data"));
 }
 
-
-
 /// Parse one value - real, integer, map, etc. Recursive.
 fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
+    match starttag {
+        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" => 
+            parse_primitive_value(reader, starttag),           
+        "map" => parse_map(reader),
+        "array" => parse_array(reader),
+        _ => Err(anyhow!("Unknown data type <{}> at position {}", starttag, reader.buffer_position())),
+    }
+}
+
+/// Parse one value - real, integer, map, etc. Recursive.
+fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
+    //  Entered with a start tag already parsed and in starttag
     let mut texts = Vec::new();                           // accumulate text here
     let mut buf = Vec::new();
     loop {
@@ -79,14 +89,13 @@ fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, 
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
-                    "map" => parse_map(reader),
-                    "array" => parse_array(reader),
+                    //  ***NEED binary and uuid***
                     _ => Err(anyhow!("Unexpected data type at position {}: {:?}", reader.buffer_position(), e)),
                 }
             },
             Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
             Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
-            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing: {:?}", reader.buffer_position(), starttag)),
+            _ => return Err(anyhow!("Unexpected value parse error at position {} while parsing: {:?}", reader.buffer_position(), starttag)),
         }
     }
 }
