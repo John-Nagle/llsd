@@ -22,8 +22,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     reader.trim_text(true); // do not want trailing blanks
     let mut txt = Vec::new();
     let mut buf = Vec::new();
-
-    // The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
+    //  Outer parse. Find <llsd> and parse its interior.
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
@@ -59,7 +58,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<LLSDValue, Error> {
+fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     let mut texts = Vec::new();                           // accumulate text here
     let mut buf = Vec::new();
@@ -93,7 +92,7 @@ fn parse_value(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<
 }
 
 //  Parse one map.
-fn parse_map(reader: &mut Reader<BufReader<&[u8]>>) -> Result<LLSDValue, Error> {
+fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with a "map" start tag just parsed.
     let mut map: HashMap::<String, LLSDValue> = HashMap::new();         // accumulating map
     let mut texts = Vec::new();                            // accumulate text here
@@ -129,7 +128,7 @@ fn parse_map(reader: &mut Reader<BufReader<&[u8]>>) -> Result<LLSDValue, Error> 
 
 //  Parse one map entry. 
 //  Format <key> STRING> </key> LLSDVALUE
-fn parse_map_entry(reader: &mut Reader<BufReader<&[u8]>>) -> Result<(String, LLSDValue), Error> {
+fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Error> {
     //  Entered with a "key" start tag just parsed.  Expecting text.
     let mut texts = Vec::new();                            // accumulate text here
     let mut buf = Vec::new();
@@ -148,7 +147,7 @@ fn parse_map_entry(reader: &mut Reader<BufReader<&[u8]>>) -> Result<(String, LLS
                 let mut buf = Vec::new();
                 let k = texts.join(" ").trim().to_string();                 // the key
                 let v = match reader.read_event(&mut buf) {
-                    Ok(Event::Start(ref e)) => {
+                    Ok(Event::Start(ref _e)) => {
                         let v = parse_value(reader, tagname)?; // parse next value
                         return Ok((k,v))                        // return key value pair
                     }
@@ -164,7 +163,7 @@ fn parse_map_entry(reader: &mut Reader<BufReader<&[u8]>>) -> Result<(String, LLS
     
 
 /// Parse one LLSD object. Recursive.
-fn parse_array(reader: &mut Reader<BufReader<&[u8]>>) -> Result<LLSDValue, Error> {
+fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with an <array> tag just parsed.
     Err(anyhow!("Unimplemented"))
 }
