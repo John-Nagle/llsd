@@ -8,12 +8,12 @@
 //  February, 2021.
 //  License: LGPL.
 //
-use std::io::{BufReader};
 use std::collections::HashMap;
 use super::{LLSDValue};
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use uuid;
 
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
@@ -29,7 +29,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                 match e.name() {
                     b"llsd" => {
                         let mut buf = Vec::new();
-                        let v = match reader.read_event(&mut buf) {
+                        match reader.read_event(&mut buf) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?;   // tag name as string to start parse
                                 let v = parse_value(&mut reader, tagname)?; // parse next value
@@ -90,7 +90,8 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
                     //  ***NEED binary and uuid***
-                    _ => Err(anyhow!("Unexpected data type at position {}: {:?}", reader.buffer_position(), e)),
+                    "uuid" => Ok(LLSDValue::UUID(*uuid::Uuid::parse_str(text.trim())?.as_bytes())),
+                    _ => Err(anyhow!("Unexpected primitive data type <{}> at position {}", starttag, reader.buffer_position())),
                 }
             },
             Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
@@ -103,6 +104,7 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
 //  Parse one map.
 fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with a "map" start tag just parsed.
+    println!("Entering parse_map");
     let mut map: HashMap::<String, LLSDValue> = HashMap::new();         // accumulating map
     let mut texts = Vec::new();                            // accumulate text here
     let mut buf = Vec::new();
@@ -139,6 +141,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 //  Format <key> STRING> </key> LLSDVALUE
 fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Error> {
     //  Entered with a "key" start tag just parsed.  Expecting text.
+    println!("Entering parse_map_entry");
     let mut texts = Vec::new();                            // accumulate text here
     let mut buf = Vec::new();
     loop {
@@ -155,8 +158,9 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                 if "key" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key",tagname)) };
                 let mut buf = Vec::new();
                 let k = texts.join(" ").trim().to_string();                 // the key
-                let v = match reader.read_event(&mut buf) {
-                    Ok(Event::Start(ref _e)) => {
+                match reader.read_event(&mut buf) {
+                    Ok(Event::Start(ref e)) => {
+                        let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
                         let v = parse_value(reader, tagname)?; // parse next value
                         return Ok((k,v))                        // return key value pair
                     }

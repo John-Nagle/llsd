@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 quick-xml = "0.22.0"
+uuid = { version = "0.8.1", features = ["v4"] }
