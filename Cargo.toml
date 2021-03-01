@@ -3,6 +3,8 @@ name = "llsd"
 version = "0.1.0"
 authors = ["John-Nagle <nagle@animats.com>"]
 edition = "2018"
+license = "LGPL-2.1 OR LGPL=3.0"
+description = "Library for serializing and de-serializing data in Linden Lab Structured Data format. This format is used by Second Life and Open Simulator"
 
 [dependencies]
 anyhow = "1.0"

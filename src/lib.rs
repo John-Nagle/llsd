@@ -13,7 +13,7 @@ pub mod xml;
 //
 use std::collections::HashMap;
 //
-///  The main primitive LLSD data item
+///  The primitive LLSD data item.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LLSDValue {
     Null,

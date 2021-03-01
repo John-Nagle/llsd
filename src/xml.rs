@@ -75,7 +75,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
-        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" => {
+        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" | "date" => {
             parse_primitive_value(reader, starttag)
         }
         "map" => parse_map(reader),
@@ -108,8 +108,11 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                 };
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" "); // combine into one big string
-                println!("Primitive value <{}> = {}", starttag, text); // ***TEMP***
-                                                                       //  Parse the primitive types.
+                //   TODO: 
+                //  1. Allow numeric values in "bool" fields.
+                //  2. Parse ISO dates.
+                //  3. Parse base64 for "binary".                                                                    
+                //  Parse the primitive types.
                 return match starttag {
                     "null" => Ok(LLSDValue::Null),
                     "real" => Ok(LLSDValue::Real(
@@ -126,8 +129,8 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
                     //  ***NEED binary***
                     "uuid" => Ok(LLSDValue::UUID(
-                        *uuid::Uuid::parse_str(text.trim())?.as_bytes(),
-                    )),
+                        *uuid::Uuid::parse_str(text.trim())?.as_bytes())),
+                    "date" => Ok(LLSDValue::Date(text.parse::<i64>()?)),
                     _ => Err(anyhow!(
                         "Unexpected primitive data type <{}> at position {}",
                         starttag,
