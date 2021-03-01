@@ -144,11 +144,12 @@ fn parse_map_entry(reader: &mut Reader<BufReader<&[u8]>>) -> Result<(String, LLS
                 let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
                 println!("End <{:?}>", tagname);
                 if "key" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key",tagname)) };
-                let k = texts.join(" ").trim();                 // the key
+                let mut buf = Vec::new();
+                let k = texts.join(" ").trim().to_string();                 // the key
                 let v = match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref e)) => {
                         let v = parse_value(reader, tagname)?; // parse next value
-                        return Ok((k.to_string(),v))                        // return key value pair
+                        return Ok((k,v))                        // return key value pair
                     }
                     _ => return Err(anyhow!("Unexpected parse error at position {} while parsing map entry", reader.buffer_position()))
                 };                  
