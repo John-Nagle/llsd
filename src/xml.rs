@@ -8,11 +8,13 @@
 //  February, 2021.
 //  License: LGPL.
 //
+use std::io::{BufReader};
+use std::collections::HashMap;
 use super::{LLSDValue, LLSDObject};
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use std::io::{BufReader};
+
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDObject, Error> {
@@ -57,21 +59,28 @@ pub fn parse(xmlstr: &str) -> Result<LLSDObject, Error> {
     return Err(anyhow!("Unimplemented"));
 }
 
-/// Parse one primitive value - real, integer, etc.
-fn parse_primitive(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<LLSDValue, Error> {
+
+
+/// Parse one value - real, integer, map, etc. Recursive.
+fn parse_value(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<LLSDValue, Error> {
+    //  Entered with a start tag alread parsed and in starttag
     let mut texts = Vec::new();                           // accumulate text here
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => {
-                println!("End <{:?}>", std::str::from_utf8(e.name()));
+                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                println!("End <{:?}>", tagname);
+                if starttag != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", starttag, tagname)) };
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" ");                 // combine into one big string
                 return match starttag {
                     "real" => Ok(LLSDValue::Real(text.parse::<f64>()?)),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
+                    "map" => parse_map(reader),
+                    "array" => parse_array(reader),
                     _ => Err(anyhow!("Unexpected data type at position {}: {:?}", reader.buffer_position(), e)),
                 }
             },
@@ -80,6 +89,82 @@ fn parse_primitive(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Res
             _ => return Err(anyhow!("Unexpected parse error at position {} while parsing: {:?}", reader.buffer_position(), starttag)),
         }
     }
+}
+
+//  Parse one map.
+fn parse_map(reader: &mut Reader<BufReader<&[u8]>>) -> Result<LLSDValue, Error> {
+    //  Entered with a "map" start tag just parsed.
+    let mut map: HashMap::<String, LLSDValue> = HashMap::new();         // accumulating map
+    let mut texts = Vec::new();                            // accumulate text here
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tagname = std::str::from_utf8(e.name())?;   // tag name as string   
+                match tagname {
+                    "key" => {
+                        let (k, v) = parse_map_entry(reader)?;  // read one key/value pair
+                        let _dup = map.insert(k, v);         // insert into map
+                        //  Duplicates are not errors, per LLSD spec.
+                    },
+                    _ => {
+                        return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
+                    }                   
+                }
+            }
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::End(ref e)) => {
+            //  End of an XML tag. No text expected.
+                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                println!("End <{:?}>", tagname);
+                if "map" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname)) };
+            },     
+            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
+            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
+            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing a map", reader.buffer_position())),
+        }
+    }   
+}
+
+//  Parse one map entry. 
+//  Format <key> STRING> </key> LLSDVALUE
+fn parse_map_entry(reader: &mut Reader<BufReader<&[u8]>>) -> Result<(String, LLSDValue), Error> {
+    //  Entered with a "key" start tag just parsed.  Expecting text.
+    let mut texts = Vec::new();                            // accumulate text here
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
+            },
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::End(ref e)) => {
+            //  End of an XML tag. Should be </key>
+                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                println!("End <{:?}>", tagname);
+                if "key" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key",tagname)) };
+                let k = texts.join(" ").trim();                 // the key
+                let v = match reader.read_event(&mut buf) {
+                    Ok(Event::Start(ref e)) => {
+                        let v = parse_value(reader, tagname)?; // parse next value
+                        return Ok((k.to_string(),v))                        // return key value pair
+                    }
+                    _ => return Err(anyhow!("Unexpected parse error at position {} while parsing map entry", reader.buffer_position()))
+                };                  
+            },     
+            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
+            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
+            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing a map entry", reader.buffer_position())),
+        }
+    }     
+}
+    
+
+/// Parse one LLSD object. Recursive.
+fn parse_array(reader: &mut Reader<BufReader<&[u8]>>) -> Result<LLSDValue, Error> {
+    //  Entered with an <array> tag just parsed.
+    Err(anyhow!("Unimplemented"))
 }
 
 /// Prints out the value as an XML string.
