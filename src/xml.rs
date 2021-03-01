@@ -10,18 +10,16 @@
 //
 use std::io::{BufReader};
 use std::collections::HashMap;
-use super::{LLSDValue, LLSDObject};
+use super::{LLSDValue};
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
-pub fn parse(xmlstr: &str) -> Result<LLSDObject, Error> {
+pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut reader = Reader::from_str(xmlstr);
     reader.trim_text(true); // do not want trailing blanks
-
-    let mut count = 0;
     let mut txt = Vec::new();
     let mut buf = Vec::new();
 
@@ -30,33 +28,32 @@ pub fn parse(xmlstr: &str) -> Result<LLSDObject, Error> {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 match e.name() {
-                    b"tag1" => println!(
-                        "attributes values: {:?}",
-                        e.attributes().map(|a| a.unwrap().value).collect::<Vec<_>>()
-                    ),
-                    b"tag2" => count += 1,
-                    _ => {
-                        println!(
-                            "<{:?}> attributes values: {:?} text: {:?}",
-                            std::str::from_utf8(e.name()),
-                            e.attributes().map(|a| a.unwrap().value).collect::<Vec<_>>(),
-                            txt
-                        ); // ***TEMP***
-                        txt.clear();
-                    }
+                    b"llsd" => {
+                        let mut buf = Vec::new();
+                        let v = match reader.read_event(&mut buf) {
+                            Ok(Event::Start(ref e)) => {
+                                let tagname = std::str::from_utf8(e.name())?;   // tag name as string to start parse
+                                let v = parse_value(&mut reader, tagname)?; // parse next value
+                                return Ok(v)                        // return key value pair
+                            },
+                            _ => return Err(anyhow!("Expected LLSD data, found {:?} error at position {}", e.name(), reader.buffer_position()))
+                        };
+                    },
+                    _ => return Err(anyhow!("Expected <llsd>, found {:?} error at position {}", 
+                        e.name(), reader.buffer_position()))                 
                 }
             }
             Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => println!("End <{:?}>", std::str::from_utf8(e.name())),
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
-            Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
+            Err(e) => return Err(anyhow!("Error at position {}: {:?}", reader.buffer_position(), e)),
             _ => (), // There are several other `Event`s we do not consider here
         }
 
         // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
         buf.clear()
     }
-    return Err(anyhow!("Unimplemented"));
+    return Err(anyhow!("Unexpected end of data"));
 }
 
 
@@ -75,10 +72,14 @@ fn parse_value(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<
                 if starttag != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", starttag, tagname)) };
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" ");                 // combine into one big string
+                //  Parse the primitive types.
                 return match starttag {
+                    "null" => Ok(LLSDValue::Null),
                     "real" => Ok(LLSDValue::Real(text.parse::<f64>()?)),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
+                    "string" => Ok(LLSDValue::String(text.trim().to_string())),
+                    "uri" => Ok(LLSDValue::String(text.trim().to_string())),
                     "map" => parse_map(reader),
                     "array" => parse_array(reader),
                     _ => Err(anyhow!("Unexpected data type at position {}: {:?}", reader.buffer_position(), e)),

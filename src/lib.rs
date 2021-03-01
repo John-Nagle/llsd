@@ -25,21 +25,7 @@ pub enum LLSDValue {
     Date(i64),
     URI(String),
     Binary(Vec<u8>),
-    Map(HashMap<String, LLSDObject>),
-    Array(Vec<LLSDObject>),
+    Map(HashMap<String, LLSDValue>),
+    Array(Vec<LLSDValue>),
 }
 
-///  LLSD object, which is a tree.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LLSDObject {
-    key: String,
-    value: LLSDValue
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
