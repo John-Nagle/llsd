@@ -8,13 +8,14 @@
 //  February, 2021.
 //  License: LGPL.
 //
-use super::LLSDValue;
+use super::{LLSDValue, LLSDObject};
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::io::{BufReader};
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
-pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
+pub fn parse(xmlstr: &str) -> Result<LLSDObject, Error> {
     let mut reader = Reader::from_str(xmlstr);
     reader.trim_text(true); // do not want trailing blanks
 
@@ -54,6 +55,31 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
         buf.clear()
     }
     return Err(anyhow!("Unimplemented"));
+}
+
+/// Parse one primitive value - real, integer, etc.
+fn parse_primitive(reader: &mut Reader<BufReader<&[u8]>>, starttag: &str) -> Result<LLSDValue, Error> {
+    let mut texts = Vec::new();                           // accumulate text here
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
+            Ok(Event::End(ref e)) => {
+                println!("End <{:?}>", std::str::from_utf8(e.name()));
+                //  End of an XML tag. Value is in text.
+                let text = texts.join(" ");                 // combine into one big string
+                return match starttag {
+                    "real" => Ok(LLSDValue::Real(text.parse::<f64>()?)),
+                    "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
+                    "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
+                    _ => Err(anyhow!("Unexpected data type at position {}: {:?}", reader.buffer_position(), e)),
+                }
+            },
+            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
+            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
+            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing: {:?}", reader.buffer_position(), starttag)),
+        }
+    }
 }
 
 /// Prints out the value as an XML string.
