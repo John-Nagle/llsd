@@ -81,15 +81,16 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
                 if starttag != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", starttag, tagname)) };
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" ");                 // combine into one big string
+                println!("Primitive value <{}> = {}", starttag, text); // ***TEMP***
                 //  Parse the primitive types.
                 return match starttag {
                     "null" => Ok(LLSDValue::Null),
-                    "real" => Ok(LLSDValue::Real(text.parse::<f64>()?)),
+                    "real" => Ok(LLSDValue::Real(if text.to_lowercase() == "nan" { "NaN".to_string() } else { text }.parse::<f64>()?)),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
-                    //  ***NEED binary and uuid***
+                    //  ***NEED binary***
                     "uuid" => Ok(LLSDValue::UUID(*uuid::Uuid::parse_str(text.trim())?.as_bytes())),
                     _ => Err(anyhow!("Unexpected primitive data type <{}> at position {}", starttag, reader.buffer_position())),
                 }
