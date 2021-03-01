@@ -28,4 +28,3 @@ pub enum LLSDValue {
     Map(HashMap<String, LLSDValue>),
     Array(Vec<LLSDValue>),
 }
-

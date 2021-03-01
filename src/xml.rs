@@ -8,13 +8,12 @@
 //  February, 2021.
 //  License: LGPL.
 //
-use std::collections::HashMap;
-use super::{LLSDValue};
+use super::LLSDValue;
 use anyhow::{anyhow, Error};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::collections::HashMap;
 use uuid;
-
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -31,21 +30,38 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                         let mut buf = Vec::new();
                         match reader.read_event(&mut buf) {
                             Ok(Event::Start(ref e)) => {
-                                let tagname = std::str::from_utf8(e.name())?;   // tag name as string to start parse
+                                let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
                                 let v = parse_value(&mut reader, tagname)?; // parse next value
-                                return Ok(v)                        // return key value pair
-                            },
-                            _ => return Err(anyhow!("Expected LLSD data, found {:?} error at position {}", e.name(), reader.buffer_position()))
+                                return Ok(v); // return key value pair
+                            }
+                            _ => {
+                                return Err(anyhow!(
+                                    "Expected LLSD data, found {:?} error at position {}",
+                                    e.name(),
+                                    reader.buffer_position()
+                                ))
+                            }
                         };
-                    },
-                    _ => return Err(anyhow!("Expected <llsd>, found {:?} error at position {}", 
-                        e.name(), reader.buffer_position()))                 
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Expected <llsd>, found {:?} error at position {}",
+                            e.name(),
+                            reader.buffer_position()
+                        ))
+                    }
                 }
             }
             Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => println!("End <{:?}>", std::str::from_utf8(e.name())),
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
-            Err(e) => return Err(anyhow!("Error at position {}: {:?}", reader.buffer_position(), e)),
+            Err(e) => {
+                return Err(anyhow!(
+                    "Error at position {}: {:?}",
+                    reader.buffer_position(),
+                    e
+                ))
+            }
             _ => (), // There are several other `Event`s we do not consider here
         }
 
@@ -59,45 +75,86 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
-        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" => 
-            parse_primitive_value(reader, starttag),           
+        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" => {
+            parse_primitive_value(reader, starttag)
+        }
         "map" => parse_map(reader),
         "array" => parse_array(reader),
-        _ => Err(anyhow!("Unknown data type <{}> at position {}", starttag, reader.buffer_position())),
+        _ => Err(anyhow!(
+            "Unknown data type <{}> at position {}",
+            starttag,
+            reader.buffer_position()
+        )),
     }
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
 fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<LLSDValue, Error> {
     //  Entered with a start tag already parsed and in starttag
-    let mut texts = Vec::new();                           // accumulate text here
+    let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => {
-                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 println!("End <{:?}>", tagname);
-                if starttag != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", starttag, tagname)) };
+                if starttag != tagname {
+                    return Err(anyhow!(
+                        "Unmatched XML tags: <{}> .. <{}>",
+                        starttag,
+                        tagname
+                    ));
+                };
                 //  End of an XML tag. Value is in text.
-                let text = texts.join(" ");                 // combine into one big string
+                let text = texts.join(" "); // combine into one big string
                 println!("Primitive value <{}> = {}", starttag, text); // ***TEMP***
-                //  Parse the primitive types.
+                                                                       //  Parse the primitive types.
                 return match starttag {
                     "null" => Ok(LLSDValue::Null),
-                    "real" => Ok(LLSDValue::Real(if text.to_lowercase() == "nan" { "NaN".to_string() } else { text }.parse::<f64>()?)),
+                    "real" => Ok(LLSDValue::Real(
+                        if text.to_lowercase() == "nan" {
+                            "NaN".to_string()
+                        } else {
+                            text
+                        }
+                        .parse::<f64>()?,
+                    )),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
                     //  ***NEED binary***
-                    "uuid" => Ok(LLSDValue::UUID(*uuid::Uuid::parse_str(text.trim())?.as_bytes())),
-                    _ => Err(anyhow!("Unexpected primitive data type <{}> at position {}", starttag, reader.buffer_position())),
-                }
-            },
-            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
-            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
-            _ => return Err(anyhow!("Unexpected value parse error at position {} while parsing: {:?}", reader.buffer_position(), starttag)),
+                    "uuid" => Ok(LLSDValue::UUID(
+                        *uuid::Uuid::parse_str(text.trim())?.as_bytes(),
+                    )),
+                    _ => Err(anyhow!(
+                        "Unexpected primitive data type <{}> at position {}",
+                        starttag,
+                        reader.buffer_position()
+                    )),
+                };
+            }
+            Ok(Event::Eof) => {
+                return Err(anyhow!(
+                    "Unexpected end of data at position {}",
+                    reader.buffer_position()
+                ))
+            }
+            Err(e) => {
+                return Err(anyhow!(
+                    "Parse Error at position {}: {:?}",
+                    reader.buffer_position(),
+                    e
+                ))
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unexpected value parse error at position {} while parsing: {:?}",
+                    reader.buffer_position(),
+                    starttag
+                ))
+            }
         }
     }
 }
@@ -106,76 +163,116 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str) -> Result<L
 fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with a "map" start tag just parsed.
     println!("Entering parse_map");
-    let mut map: HashMap::<String, LLSDValue> = HashMap::new();         // accumulating map
-    let mut texts = Vec::new();                            // accumulate text here
+    let mut map: HashMap<String, LLSDValue> = HashMap::new(); // accumulating map
+    let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tagname = std::str::from_utf8(e.name())?;   // tag name as string   
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 match tagname {
                     "key" => {
-                        let (k, v) = parse_map_entry(reader)?;  // read one key/value pair
-                        let _dup = map.insert(k, v);         // insert into map
-                        //  Duplicates are not errors, per LLSD spec.
-                    },
+                        let (k, v) = parse_map_entry(reader)?; // read one key/value pair
+                        let _dup = map.insert(k, v); // insert into map
+                                                     //  Duplicates are not errors, per LLSD spec.
+                    }
                     _ => {
                         return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
-                    }                   
+                    }
                 }
             }
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => {
-            //  End of an XML tag. No text expected.
-                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                //  End of an XML tag. No text expected.
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 println!("End <{:?}>", tagname);
-                if "map" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname)) };
-                return Ok(LLSDValue::Map(map))                                // done, valid result
-            },     
-            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
-            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
-            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing a map", reader.buffer_position())),
+                if "map" != tagname {
+                    return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname));
+                };
+                return Ok(LLSDValue::Map(map)); // done, valid result
+            }
+            Ok(Event::Eof) => {
+                return Err(anyhow!(
+                    "Unexpected end of data at position {}",
+                    reader.buffer_position()
+                ))
+            }
+            Err(e) => {
+                return Err(anyhow!(
+                    "Parse Error at position {}: {:?}",
+                    reader.buffer_position(),
+                    e
+                ))
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unexpected parse error at position {} while parsing a map",
+                    reader.buffer_position()
+                ))
+            }
         }
-    }   
+    }
 }
 
-//  Parse one map entry. 
+//  Parse one map entry.
 //  Format <key> STRING> </key> LLSDVALUE
 fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Error> {
     //  Entered with a "key" start tag just parsed.  Expecting text.
     println!("Entering parse_map_entry");
-    let mut texts = Vec::new();                            // accumulate text here
+    let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
-            },
+            }
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader).unwrap()),
             Ok(Event::End(ref e)) => {
-            //  End of an XML tag. Should be </key>
-                let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                //  End of an XML tag. Should be </key>
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 println!("End <{:?}>", tagname);
-                if "key" != tagname { return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key",tagname)) };
+                if "key" != tagname {
+                    return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key", tagname));
+                };
                 let mut buf = Vec::new();
-                let k = texts.join(" ").trim().to_string();                 // the key
+                let k = texts.join(" ").trim().to_string(); // the key
                 match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref e)) => {
-                        let tagname = std::str::from_utf8(e.name())?;   // tag name as string  
+                        let tagname = std::str::from_utf8(e.name())?; // tag name as string
                         let v = parse_value(reader, tagname)?; // parse next value
-                        return Ok((k,v))                        // return key value pair
+                        return Ok((k, v)); // return key value pair
                     }
-                    _ => return Err(anyhow!("Unexpected parse error at position {} while parsing map entry", reader.buffer_position()))
-                };                  
-            },     
-            Ok(Event::Eof) => return Err(anyhow!("Unexpected end of data at position {}", reader.buffer_position())),
-            Err(e) => return Err(anyhow!("Parse Error at position {}: {:?}", reader.buffer_position(), e)),
-            _ => return Err(anyhow!("Unexpected parse error at position {} while parsing a map entry", reader.buffer_position())),
+                    _ => {
+                        return Err(anyhow!(
+                            "Unexpected parse error at position {} while parsing map entry",
+                            reader.buffer_position()
+                        ))
+                    }
+                };
+            }
+            Ok(Event::Eof) => {
+                return Err(anyhow!(
+                    "Unexpected end of data at position {}",
+                    reader.buffer_position()
+                ))
+            }
+            Err(e) => {
+                return Err(anyhow!(
+                    "Parse Error at position {}: {:?}",
+                    reader.buffer_position(),
+                    e
+                ))
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unexpected parse error at position {} while parsing a map entry",
+                    reader.buffer_position()
+                ))
+            }
         }
-    }     
+    }
 }
-    
 
 /// Parse one LLSD object. Recursive.
 fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
