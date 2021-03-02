@@ -14,7 +14,7 @@ use quick_xml::events::{Event};
 use quick_xml::events::attributes::Attributes;  
 use quick_xml::{Reader};
 use std::collections::HashMap;
-use std::io::Cursor;
+////use std::io::Cursor;
 use std::io::Write;
 use uuid;
 use hex;
@@ -88,7 +88,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
-        "null" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" | "date" => {
+        "undefined" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" | "date" => {
             parse_primitive_value(reader, starttag, attrs)
         }
         "map" => parse_map(reader),
@@ -123,10 +123,9 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                 texts.clear();
                 //   TODO: 
                 //  1. Allow numeric values in "bool" fields.
-                //  2. Parse ISO dates.
                 //  Parse the primitive types.
                 return match starttag {
-                    "null" => Ok(LLSDValue::Null),
+                    "undefined" => Ok(LLSDValue::Undefined),
                     "real" => Ok(LLSDValue::Real(
                         if text.to_lowercase() == "nan" {
                             "NaN".to_string()
@@ -379,7 +378,6 @@ pub fn dump(val: &LLSDValue) -> Result<String, Error> {
 /// the number of spaces to indent new blocks.
 pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String,Error> {
     let mut s: Vec::<u8> = Vec::new();
-    ////let mut s: String = String::new();
     write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
     generate_value(&mut s, val, spaces, 0);
     write!(s, "</llsd>")?;
@@ -398,14 +396,20 @@ fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usi
         if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
         let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
     }
+    
+    //  Use SL "nan", not Rust "NaN"
+    fn f64_to_xml(v: f64) -> String {
+        let ss = v.to_string();
+        if ss == "NaN" { "nan".to_string() } else { ss }
+    }
     //  Emit XML for all possible types.
     match val {
-        LLSDValue::Null => tag_value(s,"null","",indent),
-        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else {"false"}, indent),
+        LLSDValue::Undefined => tag(s,"undefined/",false,indent),
+        LLSDValue::Boolean(v) => tag_value(s, "bool", if *v { "true" } else {"false"}, indent),
         LLSDValue::String(v)  => tag_value(s, "string", v.as_str(), indent),
         LLSDValue::URI(v)  => tag_value(s, "string", v.as_str(), indent),
         LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
-        LLSDValue::Real(v)  => tag_value(s, "real", v.to_string().as_str(), indent),
+        LLSDValue::Real(v)  => tag_value(s, "real", f64_to_xml(*v).as_str(), indent),
         LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent), 
         LLSDValue::Binary(v) => tag_value(s, "binary", base64::encode(v).as_str(), indent),  
         LLSDValue::Date(v) => tag_value(s, "date", 
@@ -450,7 +454,18 @@ fn xml_escape(unescaped: &str) -> String {
 
 #[test]
 fn xmlparsetest1() {
-    const TESTXML1: &str = r#"
+const TESTXMLNAN: &str = r#"
+<?xml version="1.0" encoding="UTF-8"?>
+<llsd>
+<array>
+<real>nan</real>
+<real>0</real>
+<undefined/>
+</array>
+</llsd>
+"#; 
+
+const TESTXML1: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
 <llsd>
 <map>
@@ -463,7 +478,6 @@ fn xmlparsetest1() {
     <key>time dilation</key><real>0.9878624</real>
     <key>sim fps</key><real>44.38898</real>
     <key>pysics fps</key><real>44.38906</real>
-    <key>agent updates per second</key><real>nan</real>
     <key>lsl instructions per second</key><real>0</real>
     <key>total task count</key><real>4</real>
     <key>active task count</key><real>0</real>
@@ -489,28 +503,35 @@ fn xmlparsetest1() {
         <array>
             <bool>false</bool>
             <integer>42</integer>
+            <undefined/>
         </array>
   </map>
 </map>
 </llsd>
 "#;
 
-    let result = parse(TESTXML1);
-    println!("Parse of {:?}: \n{:#?}", TESTXML1, result);
-    match result {
-        Ok(v) => {
-            println!("Regenerated XML:\n{}", pretty(&v,4).unwrap());
-        }
-        Err(e) => panic!("Parse failed: {:?}",e)
+    fn trytestcase(teststr: &str) {
+        //  Parse canned XML test case into internal format.
+        //  Must not contain NaN, because NaN != Nan
+        let parsed1 = parse(teststr).unwrap();
+        println!("Parse of {}: \n{:#?}", teststr, parsed1);
+        //  Generate XML back from parsed version.
+        let generated = pretty(&parsed1,4).unwrap();
+        //  Parse that.
+        let parsed2 = parse(&generated).unwrap();
+        //  Check that parses match.
+        assert_eq!(parsed1, parsed2);
     }
-        
+    trytestcase(TESTXML1);
+    //  Test NAN case
+    {   let parsed1 = parse(TESTXMLNAN).unwrap();
+        println!("Parse of {}: \n{:#?}", TESTXMLNAN, parsed1);
+        //  Generate XML back from parsed version.
+        let generated = pretty(&parsed1,4).unwrap();
+        //  Remove all white space for comparison
+        let s1 = TESTXMLNAN.replace(" ","").replace("\n","");
+        let s2 = generated.replace(" ","").replace("\n","");
+        assert_eq!(s1, s2);
+    }    
 }
 
-#[test]
-fn xmlgeneratetest1() {
-    const TESTLLSD1: LLSDValue = 
-        LLSDValue::Null;
-    let generated = pretty(&TESTLLSD1, 4).unwrap();
-    println!("Generated XML:\n{}", generated);
-    
-}

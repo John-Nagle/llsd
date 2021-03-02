@@ -17,7 +17,7 @@ use uuid;
 ///  The primitive LLSD data item.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LLSDValue {
-    Null,
+    Undefined,
     Boolean(bool),
     Real(f64),
     Integer(i32),
