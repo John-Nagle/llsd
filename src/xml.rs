@@ -330,25 +330,31 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Erro
 }
 
 /// Prints out the value as an XML string.
-pub fn dump(val: &LLSDValue) -> Result<Vec<u8>, Error> {
+pub fn dump(val: &LLSDValue) -> Result<String, Error> {
     pretty(val, 0)
 }
 
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
-pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<Vec<u8>,Error> {
+pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String,Error> {
     let mut s: Vec::<u8> = Vec::new();
-    generate_value(&mut s, val, spaces, 0)?;
-    s.flush();
-    Ok(s)
+    ////let mut s: String = String::new();
+    generate_value(&mut s, val, spaces, 0);
+    let _ = s.flush();
+    Ok(std::str::from_utf8(&s)?.to_string())
 }
-fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(), Error> {
+
+/// Generate one <TYPE> VALUE </TYPE> output. VALUE is recursive.
+fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) {
     fn tag(s: &mut Vec::<u8>, tag: &str, close: bool, indent: usize) {
+        if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
         let _ = write!(*s, "<{}{}>\n", tag, if close {"/"} else {""});
     }    
     fn tag_value(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
+        if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
         let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
     }
+    //  Emit XML for all possible types.
     match val {
         LLSDValue::Null => tag_value(s,"null","",indent),
         LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else {"false"}, indent),
@@ -375,9 +381,7 @@ fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usi
             }
             tag(s, "array", true, indent);        
         }      
-        _ => return Err(anyhow!("Unreachable"))
-    };
-    Ok(())       
+    };  
 }
 
 /// XML standard character escapes. 
@@ -395,50 +399,7 @@ fn xml_escape(unescaped: &str) -> String {
     }
     s
 }
-/*
-fn generate_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(),Error> {
-    //  Convenience functions
-    fn starttag(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, tag: &[u8]) -> Result<(),Error> {
-       Ok(writer.write_event(Event::Start(BytesStart::borrowed_name(tag)))?) }
-    fn endtag(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, tag: &[u8]) -> Result<(),Error> {
-       Ok(writer.write_event(Event::End(BytesEnd::borrowed(tag)))?) }
-    match val {
-        LLSDValue::Null => {
-            ////let mut elem = BytesStart::owned(b"my_elem".to_vec(), "my_elem".len());
-            ////let mut elem = BytesStart::borrowed_name(&(b"null")[..]);
-            ////let mut elem = BytesStart::borrowed_name(b"null");
-            /////writer.write_event(Event::Start(elem))?;
-            ////let mut elem = BytesEnd::borrowed(b"null");
-            ////writer.write_event(Event::End(elem))?;
-            ////writer.write_event(Event::Start(BytesStart::borrowed_name(b"null")))?;
-            starttag(writer, b"null");
-            endtag(writer, b"null");
-            ////writer.write_event(Event::End(BytesEnd::borrowed(b"null")))?;
-        },
-        
-        LLSDValue::Bool => {
-            starttag(writer, b"boolean");
-            endtag(writer, b"boolean");
-            
-        
-        
-        _ => panic!("Unreachable")
-        /*
-        Boolean(bool),
-        Real(f64),
-        Integer(i32),
-        UUID([u8; 16]),
-        String(String),
-        Date(i64),
-        URI(String),
-        Binary(Vec<u8>),
-        Map(HashMap<String, LLSDValue>),
-        Array(Vec<LLSDValue>),
-        */
-    }
-    Ok(())
-}
-*/
+
         
 
 // Unit tests
@@ -479,7 +440,7 @@ fn xmlparsetest1() {
     <!-- Comment - some additional test values -->
     <key>hex number</key><binary encoding="base16">0fa1</binary>
     <key>base64 number</key><binary>SGVsbG8gd29ybGQ=</binary>
-    <key>date</key><date>2006-02-01T14:29:53.43Z</date>
+    <key>date</key><date>2006-02-01T14:29:53Z</date>
   </map>
 </map>
 </llsd>
@@ -488,7 +449,9 @@ fn xmlparsetest1() {
     let result = parse(TESTXML1);
     println!("Parse of {:?}: \n{:#?}", TESTXML1, result);
     match result {
-        Ok(v) => (),
+        Ok(v) => {
+            println!("Regenerated XML: {}\n", pretty(&v,4).unwrap());
+        }
         Err(e) => panic!("Parse failed: {:?}",e)
     }
         
@@ -499,6 +462,6 @@ fn xmlgeneratetest1() {
     const TESTLLSD1: LLSDValue = 
         LLSDValue::Null;
     let generated = pretty(&TESTLLSD1, 4).unwrap();
-    let xmlstr = std::str::from_utf8(&generated).unwrap();
-    println!("Generated XML:\n{:?}", xmlstr);
+    println!("Generated XML:\n{}", generated);
+    
 }
