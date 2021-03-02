@@ -304,7 +304,7 @@ fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
     Ok(match encoding.as_str() {
         "base64" => base64::decode(s)?,
         "base16" => hex::decode(s)?,
-        ////"base85" => ascii85::decode(&s)?,
+        "base85" => match ascii85::decode(s) {Ok(v) => v, Err(e) => return Err(anyhow!("Base 85 decode error: {:?}",e))},
         _ => return Err(anyhow!("Unknown binary encoding: {}", encoding))
     })
 }
