@@ -13,3 +13,4 @@ uuid = { version = "0.8.1", features = ["v4"] }
 hex = "0.4.2"
 base64 = "0.13.0"
 ascii85 = "0.2.1"
+chrono = "0.4"

@@ -18,6 +18,7 @@ use uuid;
 use hex;
 use base64;
 use ascii85;
+use chrono;
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -309,7 +310,7 @@ fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
 
 /// Parse ISO 9660 date, simple form.
 fn parse_date(s: &str) -> Result<i64, Error> {
-    Err(anyhow!("Unimplemented"))
+    Ok(chrono::DateTime::parse_from_rfc3339(s)?.timestamp())
 }
 
 /// Search for attribute in attribute list
@@ -374,6 +375,7 @@ fn xmlparsetest1() {
     <!-- Comment - some additional test values -->
     <key>hex number</key><binary encoding="base16">0fa1</binary>
     <key>base64 number</key><binary>SGVsbG8gd29ybGQ=</binary>
+    <key>date</key><date>2006-02-01T14:29:53.43Z</date>
   </map>
 </map>
 </llsd>
