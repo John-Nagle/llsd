@@ -103,7 +103,6 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
-                println!("End <{:?}>", tagname);
                 if starttag != tagname {
                     return Err(anyhow!(
                         "Unmatched XML tags: <{}> .. <{}>",
@@ -117,7 +116,6 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                 //   TODO: 
                 //  1. Allow numeric values in "bool" fields.
                 //  2. Parse ISO dates.
-                //  3. Parse base64 for "binary".                                                                    
                 //  Parse the primitive types.
                 return match starttag {
                     "null" => Ok(LLSDValue::Null),
@@ -146,7 +144,7 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
             },
             Ok(Event::Eof) => {
                 return Err(anyhow!(
-                    "Unexpected end of data at position {}",
+                    "Unexpected end of data in primitive value at position {}",
                     reader.buffer_position()
                 ))
             },
@@ -172,7 +170,6 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
 //  Parse one map.
 fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with a "map" start tag just parsed.
-    println!("Entering parse_map");
     let mut map: HashMap<String, LLSDValue> = HashMap::new(); // accumulating map
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
@@ -195,7 +192,6 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. No text expected.
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
-                println!("End <{:?}>", tagname);
                 if "map" != tagname {
                     return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname));
                 };
@@ -203,7 +199,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
             },
             Ok(Event::Eof) => {
                 return Err(anyhow!(
-                    "Unexpected end of data at position {}",
+                    "Unexpected end of data in map at position {}",
                     reader.buffer_position()
                 ))
             }
@@ -229,7 +225,6 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 //  Format <key> STRING> </key> LLSDVALUE
 fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Error> {
     //  Entered with a "key" start tag just parsed.  Expecting text.
-    println!("Entering parse_map_entry");
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
@@ -242,7 +237,6 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. Should be </key>
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
-                println!("End <{:?}>", tagname);
                 if "key" != tagname {
                     return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "key", tagname));
                 };
@@ -293,7 +287,7 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 }
 
 /// Parse binary object.
-/// Input in base64.
+/// Input in base64, base16, or base85.
 fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
     // "Parsers must support base64 encoding. Parsers may support base16 and base85."
     let encoding = match get_attr(attrs, b"encoding")? {
@@ -305,7 +299,7 @@ fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
         "base64" => base64::decode(s)?,
         "base16" => hex::decode(s)?,
         "base85" => match ascii85::decode(s) {Ok(v) => v, Err(e) => return Err(anyhow!("Base 85 decode error: {:?}",e))},
-        _ => return Err(anyhow!("Unknown binary encoding: {}", encoding))
+        _ => return Err(anyhow!("Unknown encoding: <binary encoding=\"{}\">", encoding))
     })
 }
 
@@ -319,7 +313,7 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Erro
     //  Each step has a possible error, so it's hard to do this more cleanly.
     for attr in attrs.clone() {
         let a = attr?;
-        if a.key == key { continue } // not this one           
+        if a.key != key { continue } // not this one           
         let v = a.unescaped_value()?;
         let sv = std::str::from_utf8(&v)?;
         return Ok(Some(sv.to_string()))                   
@@ -373,6 +367,9 @@ fn xmlparsetest1() {
     <key>agent ms</key><real>0.01599029</real>
     <key>image ms</key><real>0.01865955</real>
     <key>script ms</key><real>0.1338836</real>
+    <!-- Comment - some additional test values -->
+    <key>hex number</key><binary encoding="base16">0fa1</binary>
+    <key>base64 number</key><binary>SGVsbG8gd29ybGQ=</binary>
   </map>
 </map>
 </llsd>
@@ -380,4 +377,9 @@ fn xmlparsetest1() {
 
     let result = parse(TESTXML1);
     println!("Parse of {:?}: \n{:#?}", TESTXML1, result);
+    match result {
+        Ok(v) => (),
+        Err(e) => panic!("Parse failed: {:?}",e)
+    }
+        
 }
