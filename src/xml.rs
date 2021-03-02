@@ -10,18 +10,17 @@
 //
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
-use quick_xml::events::{Event};
-use quick_xml::events::attributes::Attributes;  
-use quick_xml::{Reader};
-use std::collections::HashMap;
-////use std::io::Cursor;
-use std::io::Write;
-use uuid;
-use hex;
-use base64;
 use ascii85;
+use base64;
 use chrono;
 use chrono::TimeZone;
+use hex;
+use quick_xml::events::attributes::Attributes;
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use std::collections::HashMap;
+use std::io::Write;
+use uuid;
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -36,12 +35,15 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
             Ok(Event::Start(ref e)) => {
                 match e.name() {
                     b"llsd" => {
-                        if output.is_some() { return Err(anyhow!("More than one <llsd> block in data")) }
+                        if output.is_some() {
+                            return Err(anyhow!("More than one <llsd> block in data"));
+                        }
                         let mut buf = Vec::new();
                         match reader.read_event(&mut buf) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
-                                output = Some(parse_value(&mut reader, tagname, &e.attributes())?); // parse next value
+                                output = Some(parse_value(&mut reader, tagname, &e.attributes())?);
+                                // parse next value
                             }
                             _ => {
                                 return Err(anyhow!(
@@ -63,7 +65,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
             }
             Ok(Event::Text(_e)) => (), // Don't actually need random text
             Ok(Event::End(ref _e)) => (), // Tag matching check is automatic.
-            Ok(Event::Eof) => break, // exits the loop when reaching end of file
+            Ok(Event::Eof) => break,   // exits the loop when reaching end of file
             Err(e) => {
                 return Err(anyhow!(
                     "Error at position {}: {:?}",
@@ -80,17 +82,20 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     //  Final result, if stored
     match output {
         Some(out) => Ok(out),
-        None => Err(anyhow!("Unexpected end of data, no <llsd> block.")) 
-    } 
+        None => Err(anyhow!("Unexpected end of data, no <llsd> block.")),
+    }
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
+fn parse_value(
+    reader: &mut Reader<&[u8]>,
+    starttag: &str,
+    attrs: &Attributes,
+) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
-        "undef" | "real" | "integer" | "boolean" | "string" | "uri" | "binary" | "uuid" | "date" => {
-            parse_primitive_value(reader, starttag, attrs)
-        }
+        "undef" | "real" | "integer" | "boolean" | "string" | "uri" | "binary" | "uuid"
+        | "date" => parse_primitive_value(reader, starttag, attrs),
         "map" => parse_map(reader),
         "array" => parse_array(reader),
         _ => Err(anyhow!(
@@ -102,7 +107,11 @@ fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
+fn parse_primitive_value(
+    reader: &mut Reader<&[u8]>,
+    starttag: &str,
+    attrs: &Attributes,
+) -> Result<LLSDValue, Error> {
     //  Entered with a start tag already parsed and in starttag
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
@@ -121,8 +130,6 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                 //  End of an XML tag. Value is in text.
                 let text = texts.join(" ").trim().to_string(); // combine into one big string
                 texts.clear();
-                //   TODO: 
-                //  1. Allow numeric values in "bool" fields.
                 //  Parse the primitive types.
                 return match starttag {
                     "undef" => Ok(LLSDValue::Undefined),
@@ -135,12 +142,14 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                         .parse::<f64>()?,
                     )),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
-                    "boolean" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
+                    "boolean" => Ok(LLSDValue::Boolean(parse_boolean(&text)?)),
                     "string" => Ok(LLSDValue::String(text.to_string())),
                     "uri" => Ok(LLSDValue::String(text.to_string())),
-                    "uuid" => Ok(LLSDValue::UUID(
-                        if text.is_empty() {uuid::Uuid::nil()} else
-                            {uuid::Uuid::parse_str(&text)?})),
+                    "uuid" => Ok(LLSDValue::UUID(if text.is_empty() {
+                        uuid::Uuid::nil()
+                    } else {
+                        uuid::Uuid::parse_str(&text)?
+                    })),
                     "date" => Ok(LLSDValue::Date(parse_date(&text)?)),
                     "binary" => Ok(LLSDValue::Binary(parse_binary(&text, attrs)?)),
                     _ => Err(anyhow!(
@@ -149,21 +158,21 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                         reader.buffer_position()
                     )),
                 };
-            },
+            }
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data in primitive value at position {}",
                     reader.buffer_position()
                 ))
-            },
-            Ok(Event::Comment(_)) => {},    // ignore comment
+            }
+            Ok(Event::Comment(_)) => {} // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            },
+            }
             _ => {
                 return Err(anyhow!(
                     "Unexpected value parse error at position {} while parsing: {:?}",
@@ -195,7 +204,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                         return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
                     }
                 }
-            },
+            }
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. No text expected.
@@ -204,21 +213,21 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname));
                 };
                 return Ok(LLSDValue::Map(map)); // done, valid result
-            },
+            }
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data in map at position {}",
                     reader.buffer_position()
                 ))
             }
-            Ok(Event::Comment(_)) => {},    // ignore comment
+            Ok(Event::Comment(_)) => {} // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            },
+            }
             _ => {
                 return Err(anyhow!(
                     "Unexpected parse error at position {} while parsing a map",
@@ -263,21 +272,21 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                         ))
                     }
                 };
-            },
+            }
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data at position {}",
                     reader.buffer_position()
                 ))
-            },
-            Ok(Event::Comment(_)) => {},    // ignore comment
+            }
+            Ok(Event::Comment(_)) => {} // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            },
+            }
             _ => {
                 return Err(anyhow!(
                     "Unexpected parse error at position {} while parsing a map entry",
@@ -298,32 +307,36 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
-                //  Parse one data item.
+                                                              //  Parse one data item.
                 items.push(parse_primitive_value(reader, tagname, &e.attributes())?);
-             }
+            }
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. Should be </array>
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 if "array" != tagname {
-                    return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "array", tagname));
+                    return Err(anyhow!(
+                        "Unmatched XML tags: <{}> .. <{}>",
+                        "array",
+                        tagname
+                    ));
                 };
-                break;                  // end of array
-            },
+                break; // end of array
+            }
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data at position {}",
                     reader.buffer_position()
                 ))
-            },
-            Ok(Event::Comment(_)) => {},    // ignore comment
+            }
+            Ok(Event::Comment(_)) => {} // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            },
+            }
             _ => {
                 return Err(anyhow!(
                     "Unexpected parse error at position {} while parsing a map entry",
@@ -332,23 +345,31 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
             }
         }
     }
-    Ok(LLSDValue::Array(items))                // result is array of items
+    Ok(LLSDValue::Array(items)) // result is array of items
 }
 
 /// Parse binary object.
 /// Input in base64, base16, or base85.
-fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
+fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec<u8>, Error> {
     // "Parsers must support base64 encoding. Parsers may support base16 and base85."
     let encoding = match get_attr(attrs, b"encoding")? {
         Some(enc) => enc,
-        None => "base64".to_string()    // default
+        None => "base64".to_string(), // default
     };
     //  Decode appropriately.
     Ok(match encoding.as_str() {
         "base64" => base64::decode(s)?,
         "base16" => hex::decode(s)?,
-        "base85" => match ascii85::decode(s) {Ok(v) => v, Err(e) => return Err(anyhow!("Base 85 decode error: {:?}",e))},
-        _ => return Err(anyhow!("Unknown encoding: <binary encoding=\"{}\">", encoding))
+        "base85" => match ascii85::decode(s) {
+            Ok(v) => v,
+            Err(e) => return Err(anyhow!("Base 85 decode error: {:?}", e)),
+        },
+        _ => {
+            return Err(anyhow!(
+                "Unknown encoding: <binary encoding=\"{}\">",
+                encoding
+            ))
+        }
     })
 }
 
@@ -357,15 +378,26 @@ fn parse_date(s: &str) -> Result<i64, Error> {
     Ok(chrono::DateTime::parse_from_rfc3339(s)?.timestamp())
 }
 
+//  Parse boolean. LSL allows 0, false, 1, true.
+fn parse_boolean(s: &str) -> Result<bool, Error> {
+    Ok(match s {
+        "0" => false,
+        "1" => true,
+        _ => s.parse::<bool>()?,
+    })
+}
+
 /// Search for attribute in attribute list
-fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Error> {
+fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Error> {
     //  Each step has a possible error, so it's hard to do this more cleanly.
     for attr in attrs.clone() {
         let a = attr?;
-        if a.key != key { continue } // not this one           
+        if a.key != key {
+            continue;
+        } // not this one
         let v = a.unescaped_value()?;
         let sv = std::str::from_utf8(&v)?;
-        return Ok(Some(sv.to_string()))                   
+        return Ok(Some(sv.to_string()));
     }
     Ok(None)
 }
@@ -377,63 +409,76 @@ pub fn dump(val: &LLSDValue) -> Result<String, Error> {
 
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
-pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String,Error> {
-    let mut s: Vec::<u8> = Vec::new();
+pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String, Error> {
+    let mut s: Vec<u8> = Vec::new();
     write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
     generate_value(&mut s, val, spaces, 0);
     write!(s, "</llsd>")?;
     s.flush()?;
     Ok(std::str::from_utf8(&s)?.to_string())
-    
 }
 
 /// Generate one <TYPE> VALUE </TYPE> output. VALUE is recursive.
-fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) {
-    fn tag(s: &mut Vec::<u8>, tag: &str, close: bool, indent: usize) {
-        if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
-        let _ = write!(*s, "<{}{}>\n", if close {"/"} else {""}, tag);
-    }    
-    fn tag_value(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
-        if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
+fn generate_value(s: &mut Vec<u8>, val: &LLSDValue, spaces: usize, indent: usize) {
+    fn tag(s: &mut Vec<u8>, tag: &str, close: bool, indent: usize) {
+        if indent > 0 {
+            let _ = write!(*s, "{:1$}", " ", indent);
+        };
+        let _ = write!(*s, "<{}{}>\n", if close { "/" } else { "" }, tag);
+    }
+    fn tag_value(s: &mut Vec<u8>, tag: &str, text: &str, indent: usize) {
+        if indent > 0 {
+            let _ = write!(*s, "{:1$}", " ", indent);
+        };
         let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
     }
-    
+
     //  Use SL "nan", not Rust "NaN"
     fn f64_to_xml(v: f64) -> String {
         let ss = v.to_string();
-        if ss == "NaN" { "nan".to_string() } else { ss }
+        if ss == "NaN" {
+            "nan".to_string()
+        } else {
+            ss
+        }
     }
     //  Emit XML for all possible types.
     match val {
-        LLSDValue::Undefined => tag(s,"undef /",false,indent),
-        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else {"false"}, indent),
-        LLSDValue::String(v)  => tag_value(s, "string", v.as_str(), indent),
-        LLSDValue::URI(v)  => tag_value(s, "string", v.as_str(), indent),
+        LLSDValue::Undefined => tag(s, "undef /", false, indent),
+        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else { "false" }, indent),
+        LLSDValue::String(v) => tag_value(s, "string", v.as_str(), indent),
+        LLSDValue::URI(v) => tag_value(s, "string", v.as_str(), indent),
         LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
-        LLSDValue::Real(v)  => tag_value(s, "real", f64_to_xml(*v).as_str(), indent),
-        LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent), 
-        LLSDValue::Binary(v) => tag_value(s, "binary", base64::encode(v).as_str(), indent),  
-        LLSDValue::Date(v) => tag_value(s, "date", 
-            &chrono::Utc.timestamp(*v,0).to_rfc3339_opts(chrono::SecondsFormat::Secs, true), indent),
+        LLSDValue::Real(v) => tag_value(s, "real", f64_to_xml(*v).as_str(), indent),
+        LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent),
+        LLSDValue::Binary(v) => tag_value(s, "binary", base64::encode(v).as_str(), indent),
+        LLSDValue::Date(v) => tag_value(
+            s,
+            "date",
+            &chrono::Utc
+                .timestamp(*v, 0)
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            indent,
+        ),
         LLSDValue::Map(v) => {
             tag(s, "map", false, indent);
             for (key, value) in v {
                 tag_value(s, "key", key, indent + spaces);
                 generate_value(s, value, spaces, indent + spaces);
             }
-            tag(s, "map", true, indent);        
+            tag(s, "map", true, indent);
         }
         LLSDValue::Array(v) => {
             tag(s, "array", false, indent);
             for value in v {
                 generate_value(s, value, spaces, indent + spaces);
             }
-            tag(s, "array", true, indent);        
-        }      
-    };  
+            tag(s, "array", true, indent);
+        }
+    };
 }
 
-/// XML standard character escapes. 
+/// XML standard character escapes.
 fn xml_escape(unescaped: &str) -> String {
     let mut s = String::new();
     for ch in unescaped.chars() {
@@ -441,21 +486,19 @@ fn xml_escape(unescaped: &str) -> String {
             '<' => s += "&lt;",
             '>' => s += "&gt;",
             '\'' => s += "&apos;",
-            '&' => s +="&amp;",
-            '"' => s +="&quot;",
-            _ => s.push(ch)
+            '&' => s += "&amp;",
+            '"' => s += "&quot;",
+            _ => s.push(ch),
         }
     }
     s
 }
 
-        
-
 // Unit tests
 
 #[test]
 fn xmlparsetest1() {
-const TESTXMLNAN: &str = r#"
+    const TESTXMLNAN: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
 <llsd>
 <array>
@@ -464,9 +507,9 @@ const TESTXMLNAN: &str = r#"
 <undef />
 </array>
 </llsd>
-"#; 
+"#;
 
-const TESTXML1: &str = r#"
+    const TESTXML1: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
 <llsd>
 <map>
@@ -506,6 +549,7 @@ const TESTXML1: &str = r#"
             <integer>42</integer>
             <undef/>
             <uuid/>
+            <boolean>1</boolean>
         </array>
   </map>
 </map>
@@ -518,7 +562,7 @@ const TESTXML1: &str = r#"
         let parsed1 = parse(teststr).unwrap();
         println!("Parse of {}: \n{:#?}", teststr, parsed1);
         //  Generate XML back from parsed version.
-        let generated = pretty(&parsed1,4).unwrap();
+        let generated = pretty(&parsed1, 4).unwrap();
         //  Parse that.
         let parsed2 = parse(&generated).unwrap();
         //  Check that parses match.
@@ -526,14 +570,14 @@ const TESTXML1: &str = r#"
     }
     trytestcase(TESTXML1);
     //  Test NAN case
-    {   let parsed1 = parse(TESTXMLNAN).unwrap();
+    {
+        let parsed1 = parse(TESTXMLNAN).unwrap();
         println!("Parse of {}: \n{:#?}", TESTXMLNAN, parsed1);
         //  Generate XML back from parsed version.
-        let generated = pretty(&parsed1,4).unwrap();
+        let generated = pretty(&parsed1, 4).unwrap();
         //  Remove all white space for comparison
-        let s1 = TESTXMLNAN.replace(" ","").replace("\n","");
-        let s2 = generated.replace(" ","").replace("\n","");
+        let s1 = TESTXMLNAN.replace(" ", "").replace("\n", "");
+        let s2 = generated.replace(" ", "").replace("\n", "");
         assert_eq!(s1, s2);
-    }    
+    }
 }
-
