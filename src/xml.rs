@@ -318,15 +318,16 @@ fn parse_date(s: &str) -> Result<LLSDValue, Error> {
 ///  Get attribute from attribute list
 fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Error> {
     for attr in attrs.clone() {
-        match attr {
-            Err(_) => continue,
-            Ok(a) => {          
+        let a = attr?;
+        ///match attr {
+            ///Err(_) => continue,
+            ///Ok(a) => {          
                 if a.key == key { continue } // not this one           
                 let v = a.unescaped_value()?;
                 let sv = std::str::from_utf8(&v)?;
                 return Ok(Some(sv.to_string()))                   
-            }
-        }
+           /// }
+        ///}
     }
     Ok(None)
 }
