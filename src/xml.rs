@@ -15,11 +15,13 @@ use quick_xml::events::attributes::Attributes;
 use quick_xml::{Reader, Writer, escape};
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::io::Write;
 use uuid;
 use hex;
 use base64;
 use ascii85;
 use chrono;
+use chrono::TimeZone;
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -138,7 +140,7 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uuid" => Ok(LLSDValue::UUID(
-                        *uuid::Uuid::parse_str(text.trim())?.as_bytes())),
+                        uuid::Uuid::parse_str(text.trim())?)),
                     "date" => Ok(LLSDValue::Date(parse_date(&text)?)),
                     "binary" => Ok(LLSDValue::Binary(parse_binary(&text, attrs)?)),
                     _ => Err(anyhow!(
@@ -335,36 +337,45 @@ pub fn dump(val: &LLSDValue) -> Result<Vec<u8>, Error> {
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
 pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<Vec<u8>,Error> {
-    /*
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ',spaces);
-    generate_value(&mut writer, val, spaces, 0)?;
-    Ok(writer.into_inner().into_inner())
-    ////return Err(anyhow!("Unimplemented"));
-    */
     let mut s: Vec::<u8> = Vec::new();
     generate_value(&mut s, val, spaces, 0)?;
+    s.flush();
     Ok(s)
 }
 fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(), Error> {
-    fn onetag(tag: &[u8], is_end: bool) -> Vec::<u8> {
-        let mut s: Vec::<u8> = Vec::new();
-        s.push(b'<');
-        if is_end { s.push(b'/') }
-        s.extend(tag);
-        s.push(b'>');
-        s  
-    }
-    fn tagvalue(s: &mut Vec::<u8>, tag: &[u8], text: &[u8], indent: usize) {
-        s.extend(onetag(tag, false));
-        s.extend(&*escape::escape(text));
-        s.extend(onetag(tag, true));
+    fn tagvalue(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
+        let _ = write!(*s, "<{}>{}</{}>", tag, xml_escape(text), tag);
     }
     match val {
-        LLSDValue::Null => Ok(tagvalue(s, b"null",b"",indent)),
-        LLSDValue::Boolean(v) => Ok(tagvalue(s, b"boolean", if *v { b"true" } else {b"false"}, indent)),        
-        _ => Err(anyhow!("Unreachable"))
+        LLSDValue::Null => tagvalue(s,"null","",indent),
+        LLSDValue::Boolean(v) => tagvalue(s, "boolean", if *v { "true" } else {"false"}, indent),
+        LLSDValue::String(v)  => tagvalue(s, "string", v.as_str(), indent),
+        LLSDValue::URI(v)  => tagvalue(s, "string", v.as_str(), indent),
+        LLSDValue::Integer(v) => tagvalue(s, "integer", v.to_string().as_str(), indent),
+        LLSDValue::Real(v)  => tagvalue(s, "real", v.to_string().as_str(), indent),
+        LLSDValue::UUID(v) => tagvalue(s, "uuid", v.to_string().as_str(), indent), 
+        LLSDValue::Binary(v) => tagvalue(s, "binary", base64::encode(v).as_str(), indent),  
+        LLSDValue::Date(v) => tagvalue(s, "date", 
+            &chrono::Utc.timestamp(*v,0).to_rfc3339_opts(chrono::SecondsFormat::Secs, true), indent),     
+        _ => return Err(anyhow!("Unreachable"))
     };
     Ok(())       
+}
+
+/// XML standard character escapes. 
+fn xml_escape(unescaped: &str) -> String {
+    let mut s = String::new();
+    for ch in unescaped.chars() {
+        match ch {
+            '<' => s += "&lt;",
+            '>' => s += "&gt;",
+            '\'' => s += "&apos;",
+            '&' => s +="&amp;",
+            '"' => s +="&quot;",
+            _ => s.push(ch)
+        }
+    }
+    s
 }
 /*
 fn generate_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(),Error> {

@@ -12,6 +12,7 @@
 pub mod xml;
 //
 use std::collections::HashMap;
+use uuid;
 //
 ///  The primitive LLSD data item.
 #[derive(Debug, Clone, PartialEq)]
@@ -20,7 +21,7 @@ pub enum LLSDValue {
     Boolean(bool),
     Real(f64),
     Integer(i32),
-    UUID([u8; 16]),
+    UUID(uuid::Uuid),
     String(String),
     Date(i64),
     URI(String),
