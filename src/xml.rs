@@ -12,7 +12,7 @@ use super::LLSDValue;
 use anyhow::{anyhow, Error};
 use quick_xml::events::{Event, BytesEnd, BytesStart};
 use quick_xml::events::attributes::Attributes;  
-use quick_xml::{Reader, Writer};
+use quick_xml::{Reader, Writer, escape};
 use std::collections::HashMap;
 use std::io::Cursor;
 use uuid;
@@ -335,21 +335,64 @@ pub fn dump(val: &LLSDValue) -> Result<Vec<u8>, Error> {
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
 pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<Vec<u8>,Error> {
+    /*
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ',spaces);
-    generate_xml_primitive_value(&mut writer, val, spaces, 0)?;
+    generate_value(&mut writer, val, spaces, 0)?;
     Ok(writer.into_inner().into_inner())
     ////return Err(anyhow!("Unimplemented"));
+    */
+    let mut s: Vec::<u8> = Vec::new();
+    generate_value(&mut s, val, spaces, 0)?;
+    Ok(s)
 }
-
-fn generate_xml_primitive_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(),Error> {
+fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(), Error> {
+    fn onetag(tag: &[u8], is_end: bool) -> Vec::<u8> {
+        let mut s: Vec::<u8> = Vec::new();
+        s.push(b'<');
+        if is_end { s.push(b'/') }
+        s.extend(tag);
+        s.push(b'>');
+        s  
+    }
+    fn tagvalue(s: &mut Vec::<u8>, tag: &[u8], text: &[u8], indent: usize) {
+        s.extend(onetag(tag, false));
+        s.extend(&*escape::escape(text));
+        s.extend(onetag(tag, true));
+    }
+    match val {
+        LLSDValue::Null => Ok(tagvalue(s, b"null",b"",indent)),
+        LLSDValue::Boolean(v) => Ok(tagvalue(s, b"boolean", if *v { b"true" } else {b"false"}, indent)),        
+        _ => Err(anyhow!("Unreachable"))
+    };
+    Ok(())       
+}
+/*
+fn generate_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(),Error> {
+    //  Convenience functions
+    fn starttag(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, tag: &[u8]) -> Result<(),Error> {
+       Ok(writer.write_event(Event::Start(BytesStart::borrowed_name(tag)))?) }
+    fn endtag(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, tag: &[u8]) -> Result<(),Error> {
+       Ok(writer.write_event(Event::End(BytesEnd::borrowed(tag)))?) }
     match val {
         LLSDValue::Null => {
             ////let mut elem = BytesStart::owned(b"my_elem".to_vec(), "my_elem".len());
-            let mut elem = BytesStart::borrowed_name(&(b"null")[..]);
-            writer.write_event(Event::Start(elem))?;
-            let mut elem = BytesEnd::borrowed(b"null");
-            writer.write_event(Event::End(elem))?;
-        }
+            ////let mut elem = BytesStart::borrowed_name(&(b"null")[..]);
+            ////let mut elem = BytesStart::borrowed_name(b"null");
+            /////writer.write_event(Event::Start(elem))?;
+            ////let mut elem = BytesEnd::borrowed(b"null");
+            ////writer.write_event(Event::End(elem))?;
+            ////writer.write_event(Event::Start(BytesStart::borrowed_name(b"null")))?;
+            starttag(writer, b"null");
+            endtag(writer, b"null");
+            ////writer.write_event(Event::End(BytesEnd::borrowed(b"null")))?;
+        },
+        
+        LLSDValue::Bool => {
+            starttag(writer, b"boolean");
+            endtag(writer, b"boolean");
+            
+        
+        
         _ => panic!("Unreachable")
         /*
         Boolean(bool),
@@ -366,6 +409,7 @@ fn generate_xml_primitive_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, v
     }
     Ok(())
 }
+*/
         
 
 // Unit tests
