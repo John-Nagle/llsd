@@ -10,10 +10,11 @@
 //
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
-use quick_xml::events::Event;
+use quick_xml::events::{Event, BytesEnd, BytesStart};
 use quick_xml::events::attributes::Attributes;  
-use quick_xml::Reader;
+use quick_xml::{Reader, Writer};
 use std::collections::HashMap;
+use std::io::Cursor;
 use uuid;
 use hex;
 use base64;
@@ -327,15 +328,45 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Erro
 }
 
 /// Prints out the value as an XML string.
-pub fn dump(val: &LLSDValue) -> String {
-    return "Unimplemented".to_string();
+pub fn dump(val: &LLSDValue) -> Result<Vec<u8>, Error> {
+    pretty(val, 0)
 }
 
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
-pub fn pretty(val: &LLSDValue, spaces: u16) -> String {
-    return "Unimplemented".to_string();
+pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<Vec<u8>,Error> {
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ',spaces);
+    generate_xml_primitive_value(&mut writer, val, spaces, 0)?;
+    Ok(writer.into_inner().into_inner())
+    ////return Err(anyhow!("Unimplemented"));
 }
+
+fn generate_xml_primitive_value(writer: &mut Writer<std::io::Cursor<Vec<u8>>>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(),Error> {
+    match val {
+        LLSDValue::Null => {
+            ////let mut elem = BytesStart::owned(b"my_elem".to_vec(), "my_elem".len());
+            let mut elem = BytesStart::borrowed_name(&(b"null")[..]);
+            writer.write_event(Event::Start(elem))?;
+            let mut elem = BytesEnd::borrowed(b"null");
+            writer.write_event(Event::End(elem))?;
+        }
+        _ => panic!("Unreachable")
+        /*
+        Boolean(bool),
+        Real(f64),
+        Integer(i32),
+        UUID([u8; 16]),
+        String(String),
+        Date(i64),
+        URI(String),
+        Binary(Vec<u8>),
+        Map(HashMap<String, LLSDValue>),
+        Array(Vec<LLSDValue>),
+        */
+    }
+    Ok(())
+}
+        
 
 // Unit tests
 
@@ -388,4 +419,13 @@ fn xmlparsetest1() {
         Err(e) => panic!("Parse failed: {:?}",e)
     }
         
+}
+
+#[test]
+fn xmlgeneratetest1() {
+    const TESTLLSD1: LLSDValue = 
+        LLSDValue::Null;
+    let generated = pretty(&TESTLLSD1, 4).unwrap();
+    let xmlstr = std::str::from_utf8(&generated).unwrap();
+    println!("Generated XML:\n{:?}", xmlstr);
 }
