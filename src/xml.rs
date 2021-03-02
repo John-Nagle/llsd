@@ -339,16 +339,19 @@ pub fn dump(val: &LLSDValue) -> Result<String, Error> {
 pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String,Error> {
     let mut s: Vec::<u8> = Vec::new();
     ////let mut s: String = String::new();
+    write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
     generate_value(&mut s, val, spaces, 0);
-    let _ = s.flush();
+    write!(s, "</llsd>")?;
+    s.flush()?;
     Ok(std::str::from_utf8(&s)?.to_string())
+    
 }
 
 /// Generate one <TYPE> VALUE </TYPE> output. VALUE is recursive.
 fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) {
     fn tag(s: &mut Vec::<u8>, tag: &str, close: bool, indent: usize) {
         if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
-        let _ = write!(*s, "<{}{}>\n", tag, if close {"/"} else {""});
+        let _ = write!(*s, "<{}{}>\n", if close {"/"} else {""}, tag);
     }    
     fn tag_value(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
         if indent > 0 { let _ = write!(*s, "{:1$}"," ",indent); };
@@ -450,7 +453,7 @@ fn xmlparsetest1() {
     println!("Parse of {:?}: \n{:#?}", TESTXML1, result);
     match result {
         Ok(v) => {
-            println!("Regenerated XML: {}\n", pretty(&v,4).unwrap());
+            println!("Regenerated XML:\n{}", pretty(&v,4).unwrap());
         }
         Err(e) => panic!("Parse failed: {:?}",e)
     }
