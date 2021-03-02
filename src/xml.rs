@@ -144,20 +144,21 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                         reader.buffer_position()
                     )),
                 };
-            }
+            },
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data at position {}",
                     reader.buffer_position()
                 ))
-            }
+            },
+            Ok(Event::Comment(_)) => {},    // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            }
+            },
             _ => {
                 return Err(anyhow!(
                     "Unexpected value parse error at position {} while parsing: {:?}",
@@ -190,8 +191,8 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                         return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
                     }
                 }
-            }
-            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?)),
+            },
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 //  End of an XML tag. No text expected.
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
@@ -200,20 +201,21 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "map", tagname));
                 };
                 return Ok(LLSDValue::Map(map)); // done, valid result
-            }
+            },
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data at position {}",
                     reader.buffer_position()
                 ))
             }
+            Ok(Event::Comment(_)) => {},    // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            }
+            },
             _ => {
                 return Err(anyhow!(
                     "Unexpected parse error at position {} while parsing a map",
@@ -260,20 +262,21 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                         ))
                     }
                 };
-            }
+            },
             Ok(Event::Eof) => {
                 return Err(anyhow!(
                     "Unexpected end of data at position {}",
                     reader.buffer_position()
                 ))
-            }
+            },
+            Ok(Event::Comment(_)) => {},    // ignore comment
             Err(e) => {
                 return Err(anyhow!(
                     "Parse Error at position {}: {:?}",
                     reader.buffer_position(),
                     e
                 ))
-            }
+            },
             _ => {
                 return Err(anyhow!(
                     "Unexpected parse error at position {} while parsing a map entry",
@@ -295,15 +298,15 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
     // "Parsers must support base64 encoding. Parsers may support base16 and base85."
     //  ***NEED TO MAKE UNWRAP SAFE HERE***
-    let encoding  = match attrs.find(|k| k.unwrap().key == b"encoding") {
-        Some(enc) => std::str::from_utf8(&enc?.value)?,   // specified encoding
-        None => "base64"    // default
+    let encoding = match get_attr(attrs, b"encoding") {
+        Some(enc) => enc.clone().to_string(),
+        None => "base64".to_string()    // default
     };
     //  Decode appropriately.
-    Ok(match encoding {
+    Ok(match encoding.as_str() {
         "base64" => base64::decode(s)?,
         "base16" => hex::decode(s)?,
-        "base85" => ascii85::decode(&s)?,
+       //// "base85" => ascii85::decode(&s)?,
         _ => return Err(anyhow!("Unknown binary encoding: {}", encoding))
     })
 }
@@ -311,6 +314,29 @@ fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
 /// Parse ISO 9660 date, simple form.
 fn parse_date(s: &str) -> Result<LLSDValue, Error> {
     Err(anyhow!("Unimplemented"))
+}
+
+///  Get attribute from attribute list
+fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Option<String> {
+    for attr in attrs.clone() {
+        match attr {
+            Err(_) => continue,
+            Ok(a) => {          
+                if a.key == key { continue } // not this one           
+                match a.unescaped_value() {
+                    Err(_) => continue,
+                    Ok(v) => {
+                        let s = std::str::from_utf8(&v);
+                        match s {
+                            Err(_) => continue,
+                            Ok(sv) => return(Some(sv.to_string()))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None 
 }
 
 /// Prints out the value as an XML string.
