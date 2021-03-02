@@ -88,7 +88,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
 fn parse_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Attributes) -> Result<LLSDValue, Error> {
     //  Entered with a start tag alread parsed and in starttag
     match starttag {
-        "undefined" | "real" | "integer" | "bool" | "string" | "uri" | "binary" | "uuid" | "date" => {
+        "undef" | "real" | "integer" | "boolean" | "string" | "uri" | "binary" | "uuid" | "date" => {
             parse_primitive_value(reader, starttag, attrs)
         }
         "map" => parse_map(reader),
@@ -119,13 +119,13 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                     ));
                 };
                 //  End of an XML tag. Value is in text.
-                let text = texts.join(" "); // combine into one big string
+                let text = texts.join(" ").trim().to_string(); // combine into one big string
                 texts.clear();
                 //   TODO: 
                 //  1. Allow numeric values in "bool" fields.
                 //  Parse the primitive types.
                 return match starttag {
-                    "undefined" => Ok(LLSDValue::Undefined),
+                    "undef" => Ok(LLSDValue::Undefined),
                     "real" => Ok(LLSDValue::Real(
                         if text.to_lowercase() == "nan" {
                             "NaN".to_string()
@@ -135,11 +135,12 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                         .parse::<f64>()?,
                     )),
                     "integer" => Ok(LLSDValue::Integer(text.parse::<i32>()?)),
-                    "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
-                    "string" => Ok(LLSDValue::String(text.trim().to_string())),
-                    "uri" => Ok(LLSDValue::String(text.trim().to_string())),
+                    "boolean" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
+                    "string" => Ok(LLSDValue::String(text.to_string())),
+                    "uri" => Ok(LLSDValue::String(text.to_string())),
                     "uuid" => Ok(LLSDValue::UUID(
-                        uuid::Uuid::parse_str(text.trim())?)),
+                        if text.is_empty() {uuid::Uuid::nil()} else
+                            {uuid::Uuid::parse_str(&text)?})),
                     "date" => Ok(LLSDValue::Date(parse_date(&text)?)),
                     "binary" => Ok(LLSDValue::Binary(parse_binary(&text, attrs)?)),
                     _ => Err(anyhow!(
@@ -404,8 +405,8 @@ fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usi
     }
     //  Emit XML for all possible types.
     match val {
-        LLSDValue::Undefined => tag(s,"undefined/",false,indent),
-        LLSDValue::Boolean(v) => tag_value(s, "bool", if *v { "true" } else {"false"}, indent),
+        LLSDValue::Undefined => tag(s,"undef /",false,indent),
+        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else {"false"}, indent),
         LLSDValue::String(v)  => tag_value(s, "string", v.as_str(), indent),
         LLSDValue::URI(v)  => tag_value(s, "string", v.as_str(), indent),
         LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
@@ -460,7 +461,7 @@ const TESTXMLNAN: &str = r#"
 <array>
 <real>nan</real>
 <real>0</real>
-<undefined/>
+<undef />
 </array>
 </llsd>
 "#; 
@@ -501,9 +502,10 @@ const TESTXML1: &str = r#"
     <key>date</key><date>2006-02-01T14:29:53Z</date>
     <key>array</key>
         <array>
-            <bool>false</bool>
+            <boolean>false</boolean>
             <integer>42</integer>
-            <undefined/>
+            <undef/>
+            <uuid/>
         </array>
   </map>
 </map>
