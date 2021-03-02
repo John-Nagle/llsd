@@ -297,8 +297,7 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 /// Input in base64.
 fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
     // "Parsers must support base64 encoding. Parsers may support base16 and base85."
-    //  ***NEED TO MAKE UNWRAP SAFE HERE***
-    let encoding = match get_attr(attrs, b"encoding") {
+    let encoding = match get_attr(attrs, b"encoding")? {
         Some(enc) => enc.clone().to_string(),
         None => "base64".to_string()    // default
     };
@@ -317,26 +316,19 @@ fn parse_date(s: &str) -> Result<LLSDValue, Error> {
 }
 
 ///  Get attribute from attribute list
-fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Option<String> {
+fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Error> {
     for attr in attrs.clone() {
         match attr {
             Err(_) => continue,
             Ok(a) => {          
                 if a.key == key { continue } // not this one           
-                match a.unescaped_value() {
-                    Err(_) => continue,
-                    Ok(v) => {
-                        let s = std::str::from_utf8(&v);
-                        match s {
-                            Err(_) => continue,
-                            Ok(sv) => return(Some(sv.to_string()))
-                        }
-                    }
-                }
+                let v = a.unescaped_value()?;
+                let sv = std::str::from_utf8(&v)?;
+                return Ok(Some(sv.to_string()))                   
             }
         }
     }
-    None 
+    Ok(None)
 }
 
 /// Prints out the value as an XML string.
