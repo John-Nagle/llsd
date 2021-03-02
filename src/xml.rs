@@ -24,20 +24,20 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut reader = Reader::from_str(xmlstr);
     reader.trim_text(true); // do not want trailing blanks
     reader.expand_empty_elements(true); // want end tag events always
-    let mut txt = Vec::new();
     let mut buf = Vec::new();
+    let mut output: Option<LLSDValue> = None;
     //  Outer parse. Find <llsd> and parse its interior.
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 match e.name() {
                     b"llsd" => {
+                        if output.is_some() { return Err(anyhow!("More than one <llsd> block in data")) }
                         let mut buf = Vec::new();
                         match reader.read_event(&mut buf) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
-                                let v = parse_value(&mut reader, tagname, &e.attributes())?; // parse next value
-                                return Ok(v); // return key value pair
+                                output = Some(parse_value(&mut reader, tagname, &e.attributes())?); // parse next value
                             }
                             _ => {
                                 return Err(anyhow!(
@@ -57,8 +57,8 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                     }
                 }
             }
-            Ok(Event::Text(e)) => txt.push(e.unescape_and_decode(&reader)?),
-            Ok(Event::End(ref e)) => println!("End <{:?}>", std::str::from_utf8(e.name())),
+            Ok(Event::Text(e)) => (), // Don't actually need random text
+            Ok(Event::End(ref e)) => (), // Tag matching check is automatic.
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
             Err(e) => {
                 return Err(anyhow!(
@@ -73,7 +73,11 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
         // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
         buf.clear()
     }
-    return Err(anyhow!("Unexpected end of data"));
+    //  Final result, if stored
+    match output {
+        Some(out) => Ok(out),
+        None => Err(anyhow!("Unexpected end of data, no <llsd> block.")) 
+    } 
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
@@ -336,7 +340,7 @@ pub fn pretty(val: &LLSDValue, spaces: u16) -> String {
 
 #[test]
 fn xmlparsetest1() {
-    const TESTXML1: &str = r#""
+    const TESTXML1: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
 <llsd>
 <map>
@@ -373,7 +377,7 @@ fn xmlparsetest1() {
   </map>
 </map>
 </llsd>
-""#;
+"#;
 
     let result = parse(TESTXML1);
     println!("Parse of {:?}: \n{:#?}", TESTXML1, result);
