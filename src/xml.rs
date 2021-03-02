@@ -133,10 +133,9 @@ fn parse_primitive_value(reader: &mut Reader<&[u8]>, starttag: &str, attrs: &Att
                     "bool" => Ok(LLSDValue::Boolean(text.parse::<bool>()?)),
                     "string" => Ok(LLSDValue::String(text.trim().to_string())),
                     "uri" => Ok(LLSDValue::String(text.trim().to_string())),
-                    //  ***NEED binary***
                     "uuid" => Ok(LLSDValue::UUID(
                         *uuid::Uuid::parse_str(text.trim())?.as_bytes())),
-                    "date" => Ok(LLSDValue::Date(text.parse::<i64>()?)),
+                    "date" => Ok(LLSDValue::Date(parse_date(&text)?)),
                     "binary" => Ok(LLSDValue::Binary(parse_binary(&text, attrs)?)),
                     _ => Err(anyhow!(
                         "Unexpected primitive data type <{}> at position {}",
@@ -298,25 +297,26 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 fn parse_binary(s: &str, attrs: &Attributes) -> Result<Vec::<u8>, Error> {
     // "Parsers must support base64 encoding. Parsers may support base16 and base85."
     let encoding = match get_attr(attrs, b"encoding")? {
-        Some(enc) => enc.clone().to_string(),
+        Some(enc) => enc,
         None => "base64".to_string()    // default
     };
     //  Decode appropriately.
     Ok(match encoding.as_str() {
         "base64" => base64::decode(s)?,
         "base16" => hex::decode(s)?,
-       //// "base85" => ascii85::decode(&s)?,
+        ////"base85" => ascii85::decode(&s)?,
         _ => return Err(anyhow!("Unknown binary encoding: {}", encoding))
     })
 }
 
 /// Parse ISO 9660 date, simple form.
-fn parse_date(s: &str) -> Result<LLSDValue, Error> {
+fn parse_date(s: &str) -> Result<i64, Error> {
     Err(anyhow!("Unimplemented"))
 }
 
 /// Search for attribute in attribute list
 fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>,Error> {
+    //  Each step has a possible error, so it's hard to do this more cleanly.
     for attr in attrs.clone() {
         let a = attr?;
         if a.key == key { continue } // not this one           
