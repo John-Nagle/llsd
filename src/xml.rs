@@ -10,9 +10,9 @@
 //
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
-use quick_xml::events::{Event, BytesEnd, BytesStart};
+use quick_xml::events::{Event};
 use quick_xml::events::attributes::Attributes;  
-use quick_xml::{Reader, Writer, escape};
+use quick_xml::{Reader};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::Write;
@@ -61,8 +61,8 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                     }
                 }
             }
-            Ok(Event::Text(e)) => (), // Don't actually need random text
-            Ok(Event::End(ref e)) => (), // Tag matching check is automatic.
+            Ok(Event::Text(_e)) => (), // Don't actually need random text
+            Ok(Event::End(ref _e)) => (), // Tag matching check is automatic.
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
             Err(e) => {
                 return Err(anyhow!(
@@ -291,7 +291,48 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
 /// Parse one LLSD object. Recursive.
 fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     //  Entered with an <array> tag just parsed.
-    Err(anyhow!("Unimplemented"))
+    let mut texts = Vec::new(); // accumulate text here
+    let mut buf = Vec::new();
+    let mut items: Vec<LLSDValue> = Vec::new(); // accumulate items.
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
+                //  Parse one data item.
+                items.push(parse_primitive_value(reader, tagname, &e.attributes())?);
+             }
+            Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
+            Ok(Event::End(ref e)) => {
+                //  End of an XML tag. Should be </array>
+                let tagname = std::str::from_utf8(e.name())?; // tag name as string
+                if "array" != tagname {
+                    return Err(anyhow!("Unmatched XML tags: <{}> .. <{}>", "array", tagname));
+                };
+                break;                  // end of array
+            },
+            Ok(Event::Eof) => {
+                return Err(anyhow!(
+                    "Unexpected end of data at position {}",
+                    reader.buffer_position()
+                ))
+            },
+            Ok(Event::Comment(_)) => {},    // ignore comment
+            Err(e) => {
+                return Err(anyhow!(
+                    "Parse Error at position {}: {:?}",
+                    reader.buffer_position(),
+                    e
+                ))
+            },
+            _ => {
+                return Err(anyhow!(
+                    "Unexpected parse error at position {} while parsing a map entry",
+                    reader.buffer_position()
+                ))
+            }
+        }
+    }
+    Ok(LLSDValue::Array(items))                // result is array of items
 }
 
 /// Parse binary object.
@@ -444,6 +485,11 @@ fn xmlparsetest1() {
     <key>hex number</key><binary encoding="base16">0fa1</binary>
     <key>base64 number</key><binary>SGVsbG8gd29ybGQ=</binary>
     <key>date</key><date>2006-02-01T14:29:53Z</date>
+    <key>array</key>
+        <array>
+            <bool>false</bool>
+            <integer>42</integer>
+        </array>
   </map>
 </map>
 </llsd>
