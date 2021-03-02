@@ -343,20 +343,38 @@ pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<Vec<u8>,Error> {
     Ok(s)
 }
 fn generate_value(s: &mut Vec::<u8>, val: &LLSDValue, spaces: usize, indent: usize) -> Result<(), Error> {
-    fn tagvalue(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
-        let _ = write!(*s, "<{}>{}</{}>", tag, xml_escape(text), tag);
+    fn tag(s: &mut Vec::<u8>, tag: &str, close: bool, indent: usize) {
+        let _ = write!(*s, "<{}{}>\n", tag, if close {"/"} else {""});
+    }    
+    fn tag_value(s: &mut Vec::<u8>, tag: &str, text: &str, indent: usize) {
+        let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
     }
     match val {
-        LLSDValue::Null => tagvalue(s,"null","",indent),
-        LLSDValue::Boolean(v) => tagvalue(s, "boolean", if *v { "true" } else {"false"}, indent),
-        LLSDValue::String(v)  => tagvalue(s, "string", v.as_str(), indent),
-        LLSDValue::URI(v)  => tagvalue(s, "string", v.as_str(), indent),
-        LLSDValue::Integer(v) => tagvalue(s, "integer", v.to_string().as_str(), indent),
-        LLSDValue::Real(v)  => tagvalue(s, "real", v.to_string().as_str(), indent),
-        LLSDValue::UUID(v) => tagvalue(s, "uuid", v.to_string().as_str(), indent), 
-        LLSDValue::Binary(v) => tagvalue(s, "binary", base64::encode(v).as_str(), indent),  
-        LLSDValue::Date(v) => tagvalue(s, "date", 
-            &chrono::Utc.timestamp(*v,0).to_rfc3339_opts(chrono::SecondsFormat::Secs, true), indent),     
+        LLSDValue::Null => tag_value(s,"null","",indent),
+        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else {"false"}, indent),
+        LLSDValue::String(v)  => tag_value(s, "string", v.as_str(), indent),
+        LLSDValue::URI(v)  => tag_value(s, "string", v.as_str(), indent),
+        LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
+        LLSDValue::Real(v)  => tag_value(s, "real", v.to_string().as_str(), indent),
+        LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent), 
+        LLSDValue::Binary(v) => tag_value(s, "binary", base64::encode(v).as_str(), indent),  
+        LLSDValue::Date(v) => tag_value(s, "date", 
+            &chrono::Utc.timestamp(*v,0).to_rfc3339_opts(chrono::SecondsFormat::Secs, true), indent),
+        LLSDValue::Map(v) => {
+            tag(s, "map", false, indent);
+            for (key, value) in v {
+                tag_value(s, "key", key, indent + spaces);
+                generate_value(s, value, spaces, indent + spaces);
+            }
+            tag(s, "map", true, indent);        
+        }
+        LLSDValue::Array(v) => {
+            tag(s, "array", false, indent);
+            for value in v {
+                generate_value(s, value, spaces, indent + spaces);
+            }
+            tag(s, "array", true, indent);        
+        }      
         _ => return Err(anyhow!("Unreachable"))
     };
     Ok(())       
