@@ -402,17 +402,13 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
     Ok(None)
 }
 
-/// Prints out the value as an XML string.
-pub fn dump(val: &LLSDValue) -> Result<String, Error> {
-    pretty(val, 0)
-}
-
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
-pub fn pretty(val: &LLSDValue, spaces: usize) -> Result<String, Error> {
+pub fn to_xml_string(val: &LLSDValue, do_indent: bool) -> Result<String, Error> {
+    const INDENT: usize = 4;                // indent 4 spaces if asked
     let mut s: Vec<u8> = Vec::new();
     write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
-    generate_value(&mut s, val, spaces, 0);
+    generate_value(&mut s, val, if do_indent { INDENT} else { 0 }, 0);
     write!(s, "</llsd>")?;
     s.flush()?;
     Ok(std::str::from_utf8(&s)?.to_string())
@@ -562,7 +558,7 @@ fn xmlparsetest1() {
         let parsed1 = parse(teststr).unwrap();
         println!("Parse of {}: \n{:#?}", teststr, parsed1);
         //  Generate XML back from parsed version.
-        let generated = pretty(&parsed1, 4).unwrap();
+        let generated = to_xml_string(&parsed1, true).unwrap();
         //  Parse that.
         let parsed2 = parse(&generated).unwrap();
         //  Check that parses match.
@@ -574,7 +570,7 @@ fn xmlparsetest1() {
         let parsed1 = parse(TESTXMLNAN).unwrap();
         println!("Parse of {}: \n{:#?}", TESTXMLNAN, parsed1);
         //  Generate XML back from parsed version.
-        let generated = pretty(&parsed1, 4).unwrap();
+        let generated = to_xml_string(&parsed1, true).unwrap();
         //  Remove all white space for comparison
         let s1 = TESTXMLNAN.replace(" ", "").replace("\n", "");
         let s2 = generated.replace(" ", "").replace("\n", "");
