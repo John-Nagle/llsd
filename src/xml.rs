@@ -2,6 +2,8 @@
 //  Library for serializing and de-serializing data in
 //  Linden Lab Structured Data format.
 //
+//  Format documentation is at http://wiki.secondlife.com/wiki/LLSD
+//
 //  XML format.
 //
 //  Animats
@@ -405,10 +407,10 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
 pub fn to_xml_string(val: &LLSDValue, do_indent: bool) -> Result<String, Error> {
-    const INDENT: usize = 4;                // indent 4 spaces if asked
+    const INDENT: usize = 4; // indent 4 spaces if asked
     let mut s: Vec<u8> = Vec::new();
     write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
-    generate_value(&mut s, val, if do_indent { INDENT} else { 0 }, 0);
+    generate_value(&mut s, val, if do_indent { INDENT } else { 0 }, 0);
     write!(s, "</llsd>")?;
     s.flush()?;
     Ok(std::str::from_utf8(&s)?.to_string())
@@ -429,7 +431,8 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue, spaces: usize, indent: usize
         if indent > 0 {
             let _ = write!(*s, "{:1$}", " ", indent);
         };
-        if text.is_empty() {    // if empty, write as null tag
+        if text.is_empty() {
+            // if empty, write as null tag
             let _ = write!(*s, "<{} />\n", tag);
         } else {
             let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
