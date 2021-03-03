@@ -11,7 +11,7 @@
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write, Cursor};
 use uuid;
 //
 //  Constants
@@ -402,18 +402,86 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
 
 ///    Parse LLSD expressed in in binary into an LLSDObject tree.
 pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
-    if b.len() < LLSDBINARYPREFIX.len() { return Err(anyhow!("Binary LLSD too short")); }
-    if &b[0..LLSDBINARYPREFIX.len()] != LLSDBINARYPREFIX {
+    let mut cursor: Cursor<&[u8]> = Cursor::new(b);
+    let mut prefixbuf: Vec::<u8> = vec![0; LLSDBINARYPREFIX.len()];
+    cursor.read_exact(&mut prefixbuf)?;
+    if &prefixbuf[..] != LLSDBINARYPREFIX {
         return Err(anyhow!("Binary LLSD has wrong header"))};
-    parse_value(&b[LLSDBINARYPREFIX.len()..])
+    parse_value(&mut cursor)
 }
 
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(
-    b: &[u8]
-    ) -> Result<LLSDValue, Error> {
-        Err(anyhow!("Unimplemnted"))
+fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
+    //  These could be generic if generics with numeric parameters were in stable Rust.
+    fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error> {
+        let mut b:[u8;1] = [0;1];
+        cursor.read_exact(&mut b)?;     // read one byte
+        Ok(b[0])
     }
+    fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, Error> {
+        let mut b:[u8;4] = [0;4];
+        cursor.read_exact(&mut b)?;     // read one byte
+        Ok(u32::from_le_bytes(b))
+    }
+    fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, Error> {
+        let mut b:[u8;4] = [0;4];
+        cursor.read_exact(&mut b)?;     // read one byte
+        Ok(i32::from_le_bytes(b))
+    }
+    fn read_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, Error> {
+        let mut b:[u8;8] = [0;8];
+        cursor.read_exact(&mut b)?;     // read one byte
+        Ok(i64::from_le_bytes(b))
+    }
+    fn read_f64(cursor: &mut Cursor<&[u8]>) -> Result<f64, Error> {
+        let mut b:[u8;8] = [0;8];
+        cursor.read_exact(&mut b)?;     // read one byte
+        Ok(f64::from_le_bytes(b))
+    }
+    let typecode = read_u8(cursor)?;
+    match typecode {
+        //  Undefined - the empty value
+        b'!' => Ok(LLSDValue::Undefined),
+        //  Boolean - 1 or 0
+        b'0' => Ok(LLSDValue::Boolean(false)),
+        b'1' => Ok(LLSDValue::Boolean(true)),
+        //  String - length followed by data
+        b's' => {
+            let length = read_u32(cursor)?;             // read length of string
+            let mut buf = vec![0u8; length as usize];
+            cursor.read(&mut buf)?;                     // read bytes of string
+            Ok(LLSDValue::String(std::str::from_utf8(&buf)?.to_string()))
+        }
+        //  URI - length followed by data
+        b'l' => {
+            let length = read_u32(cursor)?;             // read length of string
+            let mut buf = vec![0u8; length as usize];
+            cursor.read(&mut buf)?;                     // read bytes of string
+            Ok(LLSDValue::URI(std::str::from_utf8(&buf)?.to_string()))
+        }
+        //  Integer - 4 bytes
+        b'i' => Ok(LLSDValue::Integer(read_i32(cursor)?)),
+        //  Real - 4 bytes
+        b'r' => Ok(LLSDValue::Real(read_f64(cursor)?)),
+        //  UUID - 16 bytes
+        b'u' => {
+            let mut buf: [u8;16] = [0u8; 16];
+            cursor.read(&mut buf)?;                     // read bytes of string
+            Ok(LLSDValue::UUID(uuid::Uuid::from_bytes(buf)))
+        }
+        //  Binary - length followed by data
+        b'b' => {
+            let length = read_u32(cursor)?;             // read length of string
+            let mut buf = vec![0u8; length as usize];
+            cursor.read(&mut buf)?;                     // read bytes of string
+            Ok(LLSDValue::Binary(buf))
+        }
+        //  Date - 64 bits
+        b'd' => Ok(LLSDValue::Date(read_i64(cursor)?)),
+            
+        _ => Err(anyhow!("Binary LLSD, unexpected type code {:?}", typecode))
+    }
+}
 
 
 /// Outputs an LLSDValue as a string of bytes, in LLSD "binary" format.
