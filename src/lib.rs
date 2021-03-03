@@ -10,6 +10,7 @@
 //  Modules
 //
 pub mod xml;
+pub mod binary;
 //
 use std::collections::HashMap;
 use uuid;

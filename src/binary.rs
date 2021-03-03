@@ -2,7 +2,7 @@
 //  Library for serializing and de-serializing data in
 //  Linden Lab Structured Data format.
 //
-//  XML format.
+//  Binary format.
 //
 //  Animats
 //  February, 2021.
@@ -10,18 +10,14 @@
 //
 use super::LLSDValue;
 use anyhow::{anyhow, Error};
-use ascii85;
-use base64;
-use chrono;
-use chrono::TimeZone;
-use hex;
-use quick_xml::events::attributes::Attributes;
-use quick_xml::events::Event;
-use quick_xml::Reader;
 use std::collections::HashMap;
 use std::io::Write;
 use uuid;
-
+//
+//  Constants
+//
+const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n";            // binary LLSD prefix
+/*
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut reader = Reader::from_str(xmlstr);
@@ -401,39 +397,31 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
     }
     Ok(None)
 }
-
+*/
 /// Pretty prints out the value as XML. Takes an argument that's
 /// the number of spaces to indent new blocks.
-pub fn to_xml_string(val: &LLSDValue, do_indent: bool) -> Result<String, Error> {
-    const INDENT: usize = 4;                // indent 4 spaces if asked
+pub fn to_bytes(val: &LLSDValue) -> Result<Vec::<u8>, Error> {
     let mut s: Vec<u8> = Vec::new();
-    write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
-    generate_value(&mut s, val, if do_indent { INDENT} else { 0 }, 0);
-    write!(s, "</llsd>")?;
+    s.write(LLSDBINARYPREFIX)?;  // prefix
+    generate_value(&mut s, val)?;
     s.flush()?;
-    Ok(std::str::from_utf8(&s)?.to_string())
+    Ok(s)
 }
 
 /// Generate one <TYPE> VALUE </TYPE> output. VALUE is recursive.
-fn generate_value(s: &mut Vec<u8>, val: &LLSDValue, spaces: usize, indent: usize) {
-    //  Output a single tag
+fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error>{
+    /*
     fn tag(s: &mut Vec<u8>, tag: &str, close: bool, indent: usize) {
         if indent > 0 {
             let _ = write!(*s, "{:1$}", " ", indent);
         };
         let _ = write!(*s, "<{}{}>\n", if close { "/" } else { "" }, tag);
     }
-
-    //  Internal fn - write out one tag with a value.
     fn tag_value(s: &mut Vec<u8>, tag: &str, text: &str, indent: usize) {
         if indent > 0 {
             let _ = write!(*s, "{:1$}", " ", indent);
         };
-        if text.is_empty() {    // if empty, write as null tag
-            let _ = write!(*s, "<{} />\n", tag);
-        } else {
-            let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
-        }
+        let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
     }
 
     //  Use SL "nan", not Rust "NaN"
@@ -445,12 +433,16 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue, spaces: usize, indent: usize
             ss
         }
     }
+    */
     //  Emit XML for all possible types.
     match val {
-        LLSDValue::Undefined => tag_value(s, "undef", "", indent),
-        LLSDValue::Boolean(v) => tag_value(s, "boolean", if *v { "true" } else { "false" }, indent),
-        LLSDValue::String(v) => tag_value(s, "string", v.as_str(), indent),
-        LLSDValue::URI(v) => tag_value(s, "uri", v.as_str(), indent),
+        LLSDValue::Undefined => s.write(b"!")?,
+        LLSDValue::Boolean(v) => s.write(if *v { b"1" } else { b"0"})?,
+        LLSDValue::String(v) =>  { 
+            s.write(b"s")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v.as_bytes())? },
+        LLSDValue::URI(v) => { 
+            s.write(b"l")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v.as_bytes())? },
+        /*
         LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
         LLSDValue::Real(v) => tag_value(s, "real", f64_to_xml(*v).as_str(), indent),
         LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent),
@@ -478,7 +470,10 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue, spaces: usize, indent: usize
             }
             tag(s, "array", true, indent);
         }
+        */
+        _ => panic!("Unimplemented")
     };
+    Ok(())
 }
 
 /// XML standard character escapes.
@@ -500,87 +495,5 @@ fn xml_escape(unescaped: &str) -> String {
 // Unit tests
 
 #[test]
-fn xmlparsetest1() {
-    const TESTXMLNAN: &str = r#"
-<?xml version="1.0" encoding="UTF-8"?>
-<llsd>
-<array>
-<real>nan</real>
-<real>0</real>
-<undef />
-</array>
-</llsd>
-"#;
-
-    const TESTXML1: &str = r#"
-<?xml version="1.0" encoding="UTF-8"?>
-<llsd>
-<map>
-  <key>region_id</key>
-    <uuid>67153d5b-3659-afb4-8510-adda2c034649</uuid>
-  <key>scale</key>
-    <string>one minute</string>
-  <key>simulator statistics</key>
-  <map>
-    <key>time dilation</key><real>0.9878624</real>
-    <key>sim fps</key><real>44.38898</real>
-    <key>pysics fps</key><real>44.38906</real>
-    <key>lsl instructions per second</key><real>0</real>
-    <key>total task count</key><real>4</real>
-    <key>active task count</key><real>0</real>
-    <key>active script count</key><real>4</real>
-    <key>main agent count</key><real>0</real>
-    <key>child agent count</key><real>0</real>
-    <key>inbound packets per second</key><real>1.228283</real>
-    <key>outbound packets per second</key><real>1.277508</real>
-    <key>pending downloads</key><real>0</real>
-    <key>pending uploads</key><real>0.0001096525</real>
-    <key>frame ms</key><real>0.7757886</real>
-    <key>net ms</key><real>0.3152919</real>
-    <key>sim other ms</key><real>0.1826937</real>
-    <key>sim physics ms</key><real>0.04323055</real>
-    <key>agent ms</key><real>0.01599029</real>
-    <key>image ms</key><real>0.01865955</real>
-    <key>script ms</key><real>0.1338836</real>
-    <!-- Comment - some additional test values -->
-    <key>hex number</key><binary encoding="base16">0fa1</binary>
-    <key>base64 number</key><binary>SGVsbG8gd29ybGQ=</binary>
-    <key>date</key><date>2006-02-01T14:29:53Z</date>
-    <key>array</key>
-        <array>
-            <boolean>false</boolean>
-            <integer>42</integer>
-            <undef/>
-            <uuid/>
-            <boolean>1</boolean>
-        </array>
-  </map>
-</map>
-</llsd>
-"#;
-
-    fn trytestcase(teststr: &str) {
-        //  Parse canned XML test case into internal format.
-        //  Must not contain NaN, because NaN != Nan
-        let parsed1 = parse(teststr).unwrap();
-        println!("Parse of {}: \n{:#?}", teststr, parsed1);
-        //  Generate XML back from parsed version.
-        let generated = to_xml_string(&parsed1, true).unwrap();
-        //  Parse that.
-        let parsed2 = parse(&generated).unwrap();
-        //  Check that parses match.
-        assert_eq!(parsed1, parsed2);
-    }
-    trytestcase(TESTXML1);
-    //  Test NAN case
-    {
-        let parsed1 = parse(TESTXMLNAN).unwrap();
-        println!("Parse of {}: \n{:#?}", TESTXMLNAN, parsed1);
-        //  Generate XML back from parsed version.
-        let generated = to_xml_string(&parsed1, true).unwrap();
-        //  Remove all white space for comparison
-        let s1 = TESTXMLNAN.replace(" ", "").replace("\n", "");
-        let s2 = generated.replace(" ", "").replace("\n", "");
-        assert_eq!(s1, s2);
-    }
+fn binaryparsetest1() {
 }
