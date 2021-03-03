@@ -46,7 +46,7 @@ impl LLSDValue {
                 return binary::parse(msg) }
         //  Not binary, must be some text format.
         let msgstring = std::str::from_utf8(msg)?; // convert to UTF-8 string
-        if msgstring.starts_with(xml::LLSDXMLSENTINEL) { // try XML
+        if msgstring.trim().starts_with(xml::LLSDXMLSENTINEL) { // try XML
             return xml::parse(msgstring) }  
         //  "Notation" syntax is not currently supported. 
         let snippet = &msgstring[0..usize::min(60,msgstring.len())]; // beginning of malformed LLSD      
