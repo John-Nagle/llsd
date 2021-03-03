@@ -166,7 +166,7 @@ fn parse_primitive_value(
                         reader.buffer_position()
                     )),
                 };
-                assert!(false); // unreachable
+                // unreachable
             }
             Ok(Event::Eof) => {
                 return Err(anyhow!(

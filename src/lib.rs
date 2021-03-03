@@ -41,8 +41,8 @@ impl LLSDValue {
     /// Parse LLSD, detecting format.
     pub fn parse(msg: &[u8]) -> Result<LLSDValue, Error> {
         //  Try binary first
-        if msg.len() >= binary::LLSDBINARYPREFIX.len() &&
-            &msg[0..binary::LLSDBINARYPREFIX.len()] == binary::LLSDBINARYPREFIX {
+        if msg.len() >= binary::LLSDBINARYSENTINEL.len() &&
+            &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL {
                 return binary::parse(msg) }
         //  Not binary, must be some text format.
         let msgstring = std::str::from_utf8(msg)?; // convert to UTF-8 string
