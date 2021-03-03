@@ -410,31 +410,7 @@ pub fn to_bytes(val: &LLSDValue) -> Result<Vec::<u8>, Error> {
 
 /// Generate one <TYPE> VALUE </TYPE> output. VALUE is recursive.
 fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error>{
-    /*
-    fn tag(s: &mut Vec<u8>, tag: &str, close: bool, indent: usize) {
-        if indent > 0 {
-            let _ = write!(*s, "{:1$}", " ", indent);
-        };
-        let _ = write!(*s, "<{}{}>\n", if close { "/" } else { "" }, tag);
-    }
-    fn tag_value(s: &mut Vec<u8>, tag: &str, text: &str, indent: usize) {
-        if indent > 0 {
-            let _ = write!(*s, "{:1$}", " ", indent);
-        };
-        let _ = write!(*s, "<{}>{}</{}>\n", tag, xml_escape(text), tag);
-    }
-
-    //  Use SL "nan", not Rust "NaN"
-    fn f64_to_xml(v: f64) -> String {
-        let ss = v.to_string();
-        if ss == "NaN" {
-            "nan".to_string()
-        } else {
-            ss
-        }
-    }
-    */
-    //  Emit XML for all possible types.
+    //  Emit binary for all possible types.
     match val {
         LLSDValue::Undefined => s.write(b"!")?,
         LLSDValue::Boolean(v) => s.write(if *v { b"1" } else { b"0"})?,

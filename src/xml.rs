@@ -378,11 +378,11 @@ fn parse_date(s: &str) -> Result<i64, Error> {
     Ok(chrono::DateTime::parse_from_rfc3339(s)?.timestamp())
 }
 
-//  Parse boolean. LSL allows 0, false, 1, true.
+//  Parse boolean. LSL allows 0. 0.0, false, 1. 1.0, true.
 fn parse_boolean(s: &str) -> Result<bool, Error> {
     Ok(match s {
-        "0" => false,
-        "1" => true,
+        "0" | "0.0" => false,
+        "1" | "1.0" => true,
         _ => s.parse::<bool>()?,
     })
 }
