@@ -18,7 +18,8 @@ use uuid;
 //
 //  Constants
 //
-const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n"; // binary LLSD prefix
+pub const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n"; // binary LLSD prefix
+pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exactly
 
 ///    Parse LLSD expressed in in binary into an LLSDObject tree.
 pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {

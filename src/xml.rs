@@ -23,6 +23,11 @@ use quick_xml::Reader;
 use std::collections::HashMap;
 use std::io::Write;
 use uuid;
+//
+//  Constants
+//
+pub const LLSDXMLPREFIX: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n";
+pub const LLSDXMLSENTINEL: &str = "<?xml";  // Must begin with this.
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
