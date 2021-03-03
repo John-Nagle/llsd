@@ -21,7 +21,7 @@ use uuid;
 pub const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n"; // binary LLSD prefix
 pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exactly
 
-///    Parse LLSD expressed in in binary into an LLSDObject tree.
+///    Parse LLSD expressed in binary into an LLSDObject tree.
 pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
     let mut cursor: Cursor<&[u8]> = Cursor::new(b);
     let mut prefixbuf: Vec<u8> = vec![0; LLSDBINARYPREFIX.len()];

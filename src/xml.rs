@@ -28,6 +28,8 @@ use uuid;
 //
 pub const LLSDXMLPREFIX: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n";
 pub const LLSDXMLSENTINEL: &str = "<?xml";  // Must begin with this.
+const INDENT: usize = 4; // indent 4 spaces if asked
+
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -416,12 +418,10 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
     Ok(None)
 }
 
-/// Pretty prints out the value as XML. Takes an argument that's
-/// the number of spaces to indent new blocks.
+/// Pretty prints out the value as XML. Indents by 4 spaces if requested.
 pub fn to_xml_string(val: &LLSDValue, do_indent: bool) -> Result<String, Error> {
-    const INDENT: usize = 4; // indent 4 spaces if asked
     let mut s: Vec<u8> = Vec::new();
-    write!(s, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n")?;
+    write!(s, "{}", LLSDXMLPREFIX)?;  // Standard XML prefix
     generate_value(&mut s, val, if do_indent { INDENT } else { 0 }, 0);
     write!(s, "</llsd>")?;
     s.flush()?;
@@ -575,8 +575,9 @@ fn xmlparsetest1() {
 "#;
 
     fn trytestcase(teststr: &str) {
+        //  Internal utility function.
         //  Parse canned XML test case into internal format.
-        //  Must not contain NaN, because NaN != Nan
+        //  Must not contain NaN, because NaN != Nan and the equal test will
         let parsed1 = parse(teststr).unwrap();
         println!("Parse of {}: \n{:#?}", teststr, parsed1);
         //  Generate XML back from parsed version.
