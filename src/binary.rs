@@ -439,22 +439,18 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error>{
         LLSDValue::Undefined => s.write(b"!")?,
         LLSDValue::Boolean(v) => s.write(if *v { b"1" } else { b"0"})?,
         LLSDValue::String(v) =>  { 
-            s.write(b"s")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v.as_bytes())? },
+            s.write(b"s")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(&v.as_bytes())? },
         LLSDValue::URI(v) => { 
             s.write(b"l")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v.as_bytes())? },
+        LLSDValue::Integer(v) => { s.write(b"i")?; s.write(&v.to_le_bytes())? }
+        LLSDValue::Real(v) => { s.write(b"r")?; s.write(&v.to_le_bytes())? }
+        LLSDValue::UUID(v) => { s.write(b"u")?; s.write(v.as_bytes())? }
+        LLSDValue::Binary(v) =>  { 
+            s.write(b"b")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v)? },
+        LLSDValue::Date(v) => { s.write(b"d")?; s.write(&v.to_le_bytes())? }
         /*
-        LLSDValue::Integer(v) => tag_value(s, "integer", v.to_string().as_str(), indent),
-        LLSDValue::Real(v) => tag_value(s, "real", f64_to_xml(*v).as_str(), indent),
-        LLSDValue::UUID(v) => tag_value(s, "uuid", v.to_string().as_str(), indent),
-        LLSDValue::Binary(v) => tag_value(s, "binary", base64::encode(v).as_str(), indent),
-        LLSDValue::Date(v) => tag_value(
-            s,
-            "date",
-            &chrono::Utc
-                .timestamp(*v, 0)
-                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            indent,
-        ),
+        
+        
         LLSDValue::Map(v) => {
             tag(s, "map", false, indent);
             for (key, value) in v {
