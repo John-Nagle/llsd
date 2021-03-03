@@ -552,4 +552,13 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error>{
 
 #[test]
 fn binaryparsetest1() {
+    //  Construct a test value.
+    let test1: LLSDValue = LLSDValue::Array(
+        vec![LLSDValue::Real(123.5), LLSDValue::Integer(42), LLSDValue::String("Hello world".to_string())]);
+    //  Convert to binary form.
+    let test1bin = to_bytes(&test1).unwrap();
+    //  Convert back to value form.
+    let test1value = parse(&test1bin).unwrap();
+    println!("Value after round-trip conversion: {:?}", test1value);
+    assert_eq!(test1, test1value);
 }
