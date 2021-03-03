@@ -448,44 +448,30 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error>{
         LLSDValue::Binary(v) =>  { 
             s.write(b"b")?; s.write(&(v.len() as u32).to_le_bytes())?; s.write(v)? },
         LLSDValue::Date(v) => { s.write(b"d")?; s.write(&v.to_le_bytes())? }
-        /*
-        
-        
+
+        //  Map is { childcnt key value key value ... }
         LLSDValue::Map(v) => {
-            tag(s, "map", false, indent);
+            //  Output count of key/value pairs
+            s.write(b"{")?; s.write(&(v.len() as u32).to_le_bytes())?;
+            //  Output key/value pairs
             for (key, value) in v {
-                tag_value(s, "key", key, indent + spaces);
-                generate_value(s, value, spaces, indent + spaces);
+                s.write(&(key.len() as u32).to_le_bytes())?; s.write(&key.as_bytes())?;
+                generate_value(s, value)?;
             }
-            tag(s, "map", true, indent);
+            s.write(b"}")?
         }
+        //  Array is [ childcnt child child ... ]
         LLSDValue::Array(v) => {
-            tag(s, "array", false, indent);
+            //  Output count of array entries
+            s.write(b"[")?; s.write(&(v.len() as u32).to_le_bytes())?;
+            //  Output array entries
             for value in v {
-                generate_value(s, value, spaces, indent + spaces);
+                generate_value(s, value)?;
             }
-            tag(s, "array", true, indent);
+            s.write(b"]")?
         }
-        */
-        _ => panic!("Unimplemented")
     };
     Ok(())
-}
-
-/// XML standard character escapes.
-fn xml_escape(unescaped: &str) -> String {
-    let mut s = String::new();
-    for ch in unescaped.chars() {
-        match ch {
-            '<' => s += "&lt;",
-            '>' => s += "&gt;",
-            '\'' => s += "&apos;",
-            '&' => s += "&amp;",
-            '"' => s += "&quot;",
-            _ => s.push(ch),
-        }
-    }
-    s
 }
 
 // Unit tests
