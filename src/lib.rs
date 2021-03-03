@@ -53,3 +53,36 @@ impl LLSDValue {
         Err(anyhow!("LLSD format not recognized: {:?}", snippet))
     }
 }
+
+//  Unit tests
+
+#[test]
+fn testllsdvalue() {
+    //  Convert an LLSD value through all serializations and back again.
+    //  Construct a test value. Use only floats with exact binary representations.
+    let test1map: HashMap<String, LLSDValue> = [
+        ("val1".to_string(), LLSDValue::Real(456.0)),
+        ("val2".to_string(), LLSDValue::Integer(999)),
+    ]
+    .iter()
+    .cloned()
+    .collect();
+    let test1: LLSDValue = LLSDValue::Array(vec![
+        LLSDValue::Real(123.5),
+        LLSDValue::Integer(42),
+        LLSDValue::Map(test1map),
+        LLSDValue::String("Hello world".to_string()),
+    ]);
+    //  Convert to binary form.
+    let test1bin = binary::to_bytes(&test1).unwrap();
+    //  Convert back to value form.
+    let test1value = LLSDValue::parse(&test1bin).unwrap();
+    println!("Value after round-trip conversion: {:?}", test1value);
+    //  Check that results match after round trip.
+    assert_eq!(test1, test1value);
+    //  Convert to XML
+    let test2xml = xml::to_xml_string(&test1value, true).unwrap();
+    println!("As XML:\n{}", test2xml);
+    let test2value = LLSDValue::parse(test2xml.as_bytes()).unwrap();
+    assert_eq!(test1, test2value);
+}

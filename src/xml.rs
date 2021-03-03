@@ -123,7 +123,8 @@ fn parse_primitive_value(
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        let event = reader.read_event(&mut buf);
+        match event {
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
@@ -165,6 +166,7 @@ fn parse_primitive_value(
                         reader.buffer_position()
                     )),
                 };
+                assert!(false); // unreachable
             }
             Ok(Event::Eof) => {
                 return Err(anyhow!(
@@ -182,7 +184,8 @@ fn parse_primitive_value(
             }
             _ => {
                 return Err(anyhow!(
-                    "Unexpected value parse error at position {} while parsing: {:?}",
+                    "Unexpected parse event {:?} at position {} while parsing: {:?}",
+                    event,
                     reader.buffer_position(),
                     starttag
                 ))
@@ -198,7 +201,8 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        let event = reader.read_event(&mut buf);
+        match event {
             Ok(Event::Start(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 match tagname {
@@ -235,11 +239,11 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     e
                 ))
             }
-            _ => {
-                return Err(anyhow!(
-                    "Unexpected parse error at position {} while parsing a map",
-                    reader.buffer_position()
-                ))
+            _ => {return Err(anyhow!(
+                    "Unexpected parse event {:?} at position {} while parsing map",
+                    event,
+                    reader.buffer_position(),
+                    ))
             }
         }
     }
@@ -252,7 +256,8 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
     let mut texts = Vec::new(); // accumulate text here
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        let event = reader.read_event(&mut buf);
+        match event {
             Ok(Event::Start(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                 return Err(anyhow!("Expected 'key' in map, found '{}'", tagname));
@@ -266,6 +271,7 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                 };
                 let mut buf = Vec::new();
                 let k = texts.join(" ").trim().to_string(); // the key
+                texts.clear();
                 match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref e)) => {
                         let tagname = std::str::from_utf8(e.name())?; // tag name as string
@@ -294,10 +300,10 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                     e
                 ))
             }
-            _ => {
-                return Err(anyhow!(
-                    "Unexpected parse error at position {} while parsing a map entry",
-                    reader.buffer_position()
+            _ => {return Err(anyhow!(
+                    "Unexpected parse event {:?} at position {} while parsing map entry",
+                    event,
+                    reader.buffer_position(),
                 ))
             }
         }
@@ -311,11 +317,12 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
     let mut buf = Vec::new();
     let mut items: Vec<LLSDValue> = Vec::new(); // accumulate items.
     loop {
-        match reader.read_event(&mut buf) {
+        let event = reader.read_event(&mut buf);
+        match event {
             Ok(Event::Start(ref e)) => {
                 let tagname = std::str::from_utf8(e.name())?; // tag name as string
                                                               //  Parse one data item.
-                items.push(parse_primitive_value(reader, tagname, &e.attributes())?);
+                items.push(parse_value(reader, tagname, &e.attributes())?);
             }
             Ok(Event::Text(e)) => texts.push(e.unescape_and_decode(&reader)?),
             Ok(Event::End(ref e)) => {
@@ -344,10 +351,10 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     e
                 ))
             }
-            _ => {
-                return Err(anyhow!(
-                    "Unexpected parse error at position {} while parsing a map entry",
-                    reader.buffer_position()
+            _ => {return Err(anyhow!(
+                    "Unexpected parse event {:?} at position {} while parsing array",
+                    event,
+                    reader.buffer_position(),
                 ))
             }
         }
