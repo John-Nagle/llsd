@@ -102,6 +102,7 @@ fn parse_value(
     }
 }
 
+
 /// Parse one value - real, integer, map, etc. Recursive.
 fn parse_primitive_value(
     reader: &mut Reader<&[u8]>,
@@ -398,8 +399,24 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
     Ok(None)
 }
 */
-/// Pretty prints out the value as XML. Takes an argument that's
-/// the number of spaces to indent new blocks.
+
+///    Parse LLSD expressed in in binary into an LLSDObject tree.
+pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
+    if b.len() < LLSDBINARYPREFIX.len() { return Err(anyhow!("Binary LLSD too short")); }
+    if &b[0..LLSDBINARYPREFIX.len()] != LLSDBINARYPREFIX {
+        return Err(anyhow!("Binary LLSD has wrong header"))};
+    parse_value(&b[LLSDBINARYPREFIX.len()..])
+}
+
+/// Parse one value - real, integer, map, etc. Recursive.
+fn parse_value(
+    b: &[u8]
+    ) -> Result<LLSDValue, Error> {
+        Err(anyhow!("Unimplemnted"))
+    }
+
+
+/// Outputs an LLSDValue as a string of bytes, in LLSD "binary" format.
 pub fn to_bytes(val: &LLSDValue) -> Result<Vec::<u8>, Error> {
     let mut s: Vec<u8> = Vec::new();
     s.write(LLSDBINARYPREFIX)?;  // prefix
