@@ -438,6 +438,13 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
         cursor.read_exact(&mut b)?;     // read one byte
         Ok(f64::from_le_bytes(b))
     }
+    fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec::<u8>, Error> {
+        let length = read_u32(cursor)?;     // read length in bytes
+        let mut buf = vec![0u8; length as usize];
+        cursor.read(&mut buf)?; 
+        Ok(buf)                             // read bytes of string
+    }
+    
     let typecode = read_u8(cursor)?;
     match typecode {
         //  Undefined - the empty value
@@ -478,7 +485,30 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
         }
         //  Date - 64 bits
         b'd' => Ok(LLSDValue::Date(read_i64(cursor)?)),
-            
+        
+        //  Map -- keyed collection of items
+        b'{' => {
+            let mut dict: HashMap::<String,LLSDValue> = HashMap::new();     // accumulate hash here
+            let count = read_u32(cursor)?;              // number of items
+            for _ in 0..count {
+                let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
+                let _ = dict.insert(key, parse_value(cursor)?);  // recurse and add, allowing dups
+            }
+            if read_u8(cursor)? != b'}' { return Err(anyhow!("Binary LLSD map did not end properly with }}")) }
+            Ok(LLSDValue::Map(dict))
+        }
+        //  Array -- array of items
+        //  Map -- keyed collection of items
+        b'[' => {
+            let mut array: Vec::<LLSDValue> = Vec::new();     // accumulate hash here
+            let count = read_u32(cursor)?;              // number of items
+            for _ in 0..count {
+                array.push(parse_value(cursor)?);  // recurse and add, allowing dups
+            }
+            if read_u8(cursor)? != b']' { return Err(anyhow!("Binary LLSD array did not end properly with ] ")) }
+            Ok(LLSDValue::Array(array))
+        }
+          
         _ => Err(anyhow!("Binary LLSD, unexpected type code {:?}", typecode))
     }
 }
