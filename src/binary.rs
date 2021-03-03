@@ -453,19 +453,9 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
         b'0' => Ok(LLSDValue::Boolean(false)),
         b'1' => Ok(LLSDValue::Boolean(true)),
         //  String - length followed by data
-        b's' => {
-            let length = read_u32(cursor)?;             // read length of string
-            let mut buf = vec![0u8; length as usize];
-            cursor.read(&mut buf)?;                     // read bytes of string
-            Ok(LLSDValue::String(std::str::from_utf8(&buf)?.to_string()))
-        }
+        b's' => Ok(LLSDValue::String(std::str::from_utf8(&read_variable(cursor)?)?.to_string())),
         //  URI - length followed by data
-        b'l' => {
-            let length = read_u32(cursor)?;             // read length of string
-            let mut buf = vec![0u8; length as usize];
-            cursor.read(&mut buf)?;                     // read bytes of string
-            Ok(LLSDValue::URI(std::str::from_utf8(&buf)?.to_string()))
-        }
+        b'l' => Ok(LLSDValue::URI(std::str::from_utf8(&read_variable(cursor)?)?.to_string())),
         //  Integer - 4 bytes
         b'i' => Ok(LLSDValue::Integer(read_i32(cursor)?)),
         //  Real - 4 bytes
@@ -477,15 +467,9 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
             Ok(LLSDValue::UUID(uuid::Uuid::from_bytes(buf)))
         }
         //  Binary - length followed by data
-        b'b' => {
-            let length = read_u32(cursor)?;             // read length of string
-            let mut buf = vec![0u8; length as usize];
-            cursor.read(&mut buf)?;                     // read bytes of string
-            Ok(LLSDValue::Binary(buf))
-        }
+        b'b' => Ok(LLSDValue::Binary(read_variable(cursor)?)),
         //  Date - 64 bits
-        b'd' => Ok(LLSDValue::Date(read_i64(cursor)?)),
-        
+        b'd' => Ok(LLSDValue::Date(read_i64(cursor)?)),        
         //  Map -- keyed collection of items
         b'{' => {
             let mut dict: HashMap::<String,LLSDValue> = HashMap::new();     // accumulate hash here
@@ -498,7 +482,6 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
             Ok(LLSDValue::Map(dict))
         }
         //  Array -- array of items
-        //  Map -- keyed collection of items
         b'[' => {
             let mut array: Vec::<LLSDValue> = Vec::new();     // accumulate hash here
             let count = read_u32(cursor)?;              // number of items
