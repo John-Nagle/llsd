@@ -250,7 +250,7 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
 }
 
 //  Parse one map entry.
-//  Format <key> STRING> </key> LLSDVALUE
+//  Format <key> STRING </key> LLSDVALUE
 fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Error> {
     //  Entered with a "key" start tag just parsed.  Expecting text.
     let mut texts = Vec::new(); // accumulate text here
