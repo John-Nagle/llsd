@@ -36,7 +36,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
     let mut reader = Reader::from_str(xmlstr);
     reader.trim_text(true); // do not want trailing blanks
     reader.expand_empty_elements(true); // want end tag events always
-    let mut buf = Vec::new();
+    let mut buf = Vec::new(); // reader work area
     let mut output: Option<LLSDValue> = None;
     //  Outer parse. Find <llsd> and parse its interior.
     loop {
@@ -47,12 +47,12 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                         if output.is_some() {
                             return Err(anyhow!("More than one <llsd> block in data"));
                         }
-                        let mut buf = Vec::new();
-                        match reader.read_event(&mut buf) {
+                        let mut buf2 = Vec::new();
+                        match reader.read_event(&mut buf2) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
+                                //  This does all the real work.
                                 output = Some(parse_value(&mut reader, tagname, &e.attributes())?);
-                                // parse next value
                             }
                             _ => {
                                 return Err(anyhow!(
