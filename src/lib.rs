@@ -49,7 +49,8 @@ impl LLSDValue {
         if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) { // try XML
             return xml::parse(msgstring) }  
         //  "Notation" syntax is not currently supported. 
-        let snippet = &msgstring[0..usize::min(60,msgstring.len())]; // beginning of malformed LLSD      
+        //  Trim sring to N chars for error msg.
+        let snippet = msgstring.chars().zip(0..60).map(|(c,_)| c).collect::<String>();
         Err(anyhow!("LLSD format not recognized: {:?}", snippet))
     }
 }
@@ -85,4 +86,13 @@ fn testllsdvalue() {
     println!("As XML:\n{}", test2xml);
     let test2value = LLSDValue::parse(test2xml.as_bytes()).unwrap();
     assert_eq!(test1, test2value);
+    //  Test error cases
+    match LLSDValue::parse(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>") {
+        Err(e) => println!("Error as expected: {:?}",e),
+        Ok(val) => panic!("Bad input not detected: {:?}", val)
+    }
+    match LLSDValue::parse("String ending in emoji to check Unicode truncation. 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀".as_bytes()) {
+        Err(e) => println!("Error as expected: {:?}",e),
+        Ok(val) => panic!("Bad input not detected: {:?}", val)
+    }
 }
