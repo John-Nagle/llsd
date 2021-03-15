@@ -14,7 +14,10 @@ Parsing and output functions are provided.
 
 ## Status
 
-IN PROGRESS - do not use yet.
+XML and binary versions are implemented.
+"Notation" will not be implemented at this time.
+
+Unit tests pass. Not checked against Second Life and Open Simulator systems yet.
 
 ## Data types
 
