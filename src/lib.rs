@@ -43,13 +43,13 @@ impl LLSDValue {
         if msg.len() >= binary::LLSDBINARYSENTINEL.len()
             && &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL
         {
-            return binary::parse(&msg[binary::LLSDBINARYSENTINEL.len()..]);
+            return binary::parse_array(&msg[binary::LLSDBINARYSENTINEL.len()..]);
         }
         //  Check for binary without header. If array or map marker, parse.
         if msg.len() > 1 {
             match msg[0] {
                 // check first char
-                b'{' | b'[' => return binary::parse(msg),
+                b'{' | b'[' => return binary::parse_array(msg),
                 _ => {}
             }
         }

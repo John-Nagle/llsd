@@ -21,41 +21,47 @@ use uuid;
 pub const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n"; // binary LLSD prefix
 pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exactly
 
-///    Parse LLSD expressed in binary into an LLSDObject tree.
-pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
+///    Parse LLSD array expressed in binary into an LLSDObject tree. No header.
+pub fn parse_array(b: &[u8]) -> Result<LLSDValue, Error> {
     let mut cursor: Cursor<&[u8]> = Cursor::new(b);
     parse_value(&mut cursor)
 }
 
+///    Parse LLSD reader expressed in binary into an LLSDObject tree. No header.
+pub fn parse_read(cursor: &mut dyn Read) -> Result<LLSDValue, Error> {
+    ////let mut cursor: Cursor<&[u8]> = Cursor::new(b);
+    parse_value(cursor)
+}
+
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
+fn parse_value(cursor: &mut dyn Read) -> Result<LLSDValue, Error> {
     //  These could be generic if generics with numeric parameters were in stable Rust.
-    fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error> {
+    fn read_u8(cursor: &mut dyn Read) -> Result<u8, Error> {
         let mut b: [u8; 1] = [0; 1];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(b[0])
     }
-    fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, Error> {
+    fn read_u32(cursor: &mut dyn Read) -> Result<u32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(u32::from_be_bytes(b))
     }
-    fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, Error> {
+    fn read_i32(cursor: &mut dyn Read) -> Result<i32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(i32::from_be_bytes(b))
     }
-    fn read_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, Error> {
+    fn read_i64(cursor: &mut dyn Read) -> Result<i64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(i64::from_be_bytes(b))
     }
-    fn read_f64(cursor: &mut Cursor<&[u8]>) -> Result<f64, Error> {
+    fn read_f64(cursor: &mut dyn Read) -> Result<f64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(f64::from_be_bytes(b))
     }
-    fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, Error> {
+    fn read_variable(cursor: &mut dyn Read) -> Result<Vec<u8>, Error> {
         let length = read_u32(cursor)?; // read length in bytes
         let mut buf = vec![0u8; length as usize];
         cursor.read(&mut buf)?;
@@ -229,7 +235,7 @@ fn binaryparsetest1() {
     //  Convert to binary form.
     let test1bin = to_bytes(&test1).unwrap();
     //  Convert back to value form.
-    let test1value = parse(&test1bin[LLSDBINARYSENTINEL.len()..]).unwrap();
+    let test1value = parse_array(&test1bin[LLSDBINARYSENTINEL.len()..]).unwrap();
     println!("Value after round-trip conversion: {:?}", test1value);
     //  Check that results match after round trip.
     assert_eq!(test1, test1value);
