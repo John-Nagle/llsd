@@ -45,22 +45,22 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
     fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(u32::from_le_bytes(b))
+        Ok(u32::from_be_bytes(b))
     }
     fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(i32::from_le_bytes(b))
+        Ok(i32::from_be_bytes(b))
     }
     fn read_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(i64::from_le_bytes(b))
+        Ok(i64::from_be_bytes(b))
     }
     fn read_f64(cursor: &mut Cursor<&[u8]>) -> Result<f64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(f64::from_le_bytes(b))
+        Ok(f64::from_be_bytes(b))
     }
     fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, Error> {
         let length = read_u32(cursor)?; // read length in bytes
@@ -155,21 +155,21 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         LLSDValue::Boolean(v) => s.write(if *v { b"1" } else { b"0" })?,
         LLSDValue::String(v) => {
             s.write(b"s")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(&v.as_bytes())?
         }
         LLSDValue::URI(v) => {
             s.write(b"l")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(v.as_bytes())?
         }
         LLSDValue::Integer(v) => {
             s.write(b"i")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
         LLSDValue::Real(v) => {
             s.write(b"r")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
         LLSDValue::UUID(v) => {
             s.write(b"u")?;
@@ -177,23 +177,23 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         }
         LLSDValue::Binary(v) => {
             s.write(b"b")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(v)?
         }
         LLSDValue::Date(v) => {
             s.write(b"d")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
 
         //  Map is { childcnt key value key value ... }
         LLSDValue::Map(v) => {
             //  Output count of key/value pairs
             s.write(b"{")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             //  Output key/value pairs
             for (key, value) in v {
                 s.write(&[b'k'])?;   // k prefix to key. UNDOCUMENTED
-                s.write(&(key.len() as u32).to_le_bytes())?;
+                s.write(&(key.len() as u32).to_be_bytes())?;
                 s.write(&key.as_bytes())?;
                 generate_value(s, value)?;
             }
@@ -203,7 +203,7 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         LLSDValue::Array(v) => {
             //  Output count of array entries
             s.write(b"[")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             //  Output array entries
             for value in v {
                 generate_value(s, value)?;
