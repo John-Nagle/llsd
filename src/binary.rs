@@ -23,7 +23,6 @@ pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exa
 
 ///    Parse LLSD expressed in binary into an LLSDObject tree.
 pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
-    println!("Binary dump 2: {:?}", b);  // ***TEMP***
     let mut cursor: Cursor<&[u8]> = Cursor::new(b);
     /*
     let mut prefixbuf: Vec<u8> = vec![0; LLSDBINARYPREFIX.len()];
@@ -71,6 +70,7 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
     }
 
     let typecode = read_u8(cursor)?;
+    println!("Typecode: {:?}", typecode); // ***TEMP***
     match typecode {
         //  Undefined - the empty value
         b'!' => Ok(LLSDValue::Undefined),
