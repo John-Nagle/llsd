@@ -43,11 +43,19 @@ impl LLSDValue {
         //  Try binary first
         if msg.len() >= binary::LLSDBINARYSENTINEL.len() &&
             &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL {
-                return binary::parse(msg) }
-        //  Not binary, must be some text format.
+                return binary::parse(&msg[binary::LLSDBINARYSENTINEL.len()..]) }
+        //  No binary sentinel, try text format.
         let msgstring = std::str::from_utf8(msg)?; // convert to UTF-8 string
         if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) { // try XML
-            return xml::parse(msgstring) }  
+            return xml::parse(msgstring) }
+        //  Check for binary without header. If array or map marker, parse.
+        if msg.len() > 1 && msg[0] == msg[msg.len()-1] {
+            match msg[0] {                          // check first char
+                b'{'| b'[' => return binary::parse(msg),
+                _ => {}
+            }
+        }
+        //  ***NEED TO RECOGNIZE BINARY WITHOUT HEADER***
         //  "Notation" syntax is not currently supported. 
         //  Trim sring to N chars for error msg.
         let snippet = msgstring.chars().zip(0..60).map(|(c,_)| c).collect::<String>();
