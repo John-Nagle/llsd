@@ -64,6 +64,7 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
     }
     fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, Error> {
         let length = read_u32(cursor)?; // read length in bytes
+        println!("Read_variable, length {}", length); // ***TEMP***
         let mut buf = vec![0u8; length as usize];
         cursor.read(&mut buf)?;
         Ok(buf) // read bytes of string
