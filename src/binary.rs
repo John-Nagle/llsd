@@ -24,13 +24,6 @@ pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exa
 ///    Parse LLSD expressed in binary into an LLSDObject tree.
 pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
     let mut cursor: Cursor<&[u8]> = Cursor::new(b);
-    /*
-    let mut prefixbuf: Vec<u8> = vec![0; LLSDBINARYPREFIX.len()];
-    cursor.read_exact(&mut prefixbuf)?;
-    if &prefixbuf[..] != LLSDBINARYPREFIX {
-        return Err(anyhow!("Binary LLSD has wrong header"));
-    };
-    */
     parse_value(&mut cursor)
 }
 
