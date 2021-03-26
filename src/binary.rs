@@ -108,6 +108,7 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
                 match keyprefix {
                     b'k' => {
                         let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
+                        println!("Map key: {}", key);   // ***TEMP***
                         let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
                     }
                     _ => return Err(anyhow!("Binary LLSD map key had {:?} instead of expected 'k'", keyprefix)) 
