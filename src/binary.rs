@@ -64,14 +64,12 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
     }
     fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, Error> {
         let length = read_u32(cursor)?; // read length in bytes
-        println!("Read_variable, length {}", length); // ***TEMP***
         let mut buf = vec![0u8; length as usize];
         cursor.read(&mut buf)?;
         Ok(buf) // read bytes of string
     }
 
     let typecode = read_u8(cursor)?;
-    println!("Typecode: {:?}", typecode); // ***TEMP***
     match typecode {
         //  Undefined - the empty value
         b'!' => Ok(LLSDValue::Undefined),
@@ -105,15 +103,18 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
             let mut dict: HashMap<String, LLSDValue> = HashMap::new(); // accumulate hash here
             let count = read_u32(cursor)?; // number of items
             for _ in 0..count {
-                let keyprefix = &read_u8(cursor)?;           // key should begin with b'k';
+                let keyprefix = &read_u8(cursor)?; // key should begin with b'k';
                 match keyprefix {
                     b'k' => {
-                        println!("Map k found"); // ***TEMP***
                         let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
-                        println!("Map key: {}", key);   // ***TEMP***
                         let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
                     }
-                    _ => return Err(anyhow!("Binary LLSD map key had {:?} instead of expected 'k'", keyprefix)) 
+                    _ => {
+                        return Err(anyhow!(
+                            "Binary LLSD map key had {:?} instead of expected 'k'",
+                            keyprefix
+                        ))
+                    }
                 }
             }
             if read_u8(cursor)? != b'}' {
@@ -192,7 +193,7 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
             s.write(&(v.len() as u32).to_be_bytes())?;
             //  Output key/value pairs
             for (key, value) in v {
-                s.write(&[b'k'])?;   // k prefix to key. UNDOCUMENTED
+                s.write(&[b'k'])?; // k prefix to key. UNDOCUMENTED
                 s.write(&(key.len() as u32).to_be_bytes())?;
                 s.write(&key.as_bytes())?;
                 generate_value(s, value)?;

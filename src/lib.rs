@@ -14,9 +14,9 @@
 pub mod binary;
 pub mod xml;
 //
+use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use uuid;
-use anyhow::{anyhow, Error};
 //
 ///  The primitive LLSD data item.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,28 +37,38 @@ pub enum LLSDValue {
 //  Implementation
 
 impl LLSDValue {
-
     /// Parse LLSD, detecting format.
     pub fn parse(msg: &[u8]) -> Result<LLSDValue, Error> {
         //  Try binary first
-        if msg.len() >= binary::LLSDBINARYSENTINEL.len() &&
-            &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL {
-                return binary::parse(&msg[binary::LLSDBINARYSENTINEL.len()..]) }
+        if msg.len() >= binary::LLSDBINARYSENTINEL.len()
+            && &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL
+        {
+            return binary::parse(&msg[binary::LLSDBINARYSENTINEL.len()..]);
+        }
         //  Check for binary without header. If array or map marker, parse.
-        if msg.len() > 1 /* && msg[0] == msg[msg.len()-1] */ {
-            match msg[0] {                          // check first char
-                b'{'| b'[' => return binary::parse(msg),
+        if msg.len() > 1
+        /* && msg[0] == msg[msg.len()-1] */
+        {
+            match msg[0] {
+                // check first char
+                b'{' | b'[' => return binary::parse(msg),
                 _ => {}
             }
         }
         //  No binary sentinel, try text format.
         let msgstring = std::str::from_utf8(msg)?; // convert to UTF-8 string
-        if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) { // try XML
-            return xml::parse(msgstring) }
+        if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) {
+            // try XML
+            return xml::parse(msgstring);
+        }
         //  ***NEED TO RECOGNIZE BINARY WITHOUT HEADER***
-        //  "Notation" syntax is not currently supported. 
+        //  "Notation" syntax is not currently supported.
         //  Trim sring to N chars for error msg.
-        let snippet = msgstring.chars().zip(0..60).map(|(c,_)| c).collect::<String>();
+        let snippet = msgstring
+            .chars()
+            .zip(0..60)
+            .map(|(c, _)| c)
+            .collect::<String>();
         Err(anyhow!("LLSD format not recognized: {:?}", snippet))
     }
 }
@@ -95,9 +105,11 @@ fn testllsdvalue() {
     let test2value = LLSDValue::parse(test2xml.as_bytes()).unwrap();
     assert_eq!(test1, test2value);
     //  Test error cases
-    match LLSDValue::parse(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>") {
-        Err(e) => println!("Error as expected: {:?}",e),
-        Ok(val) => panic!("Bad input not detected: {:?}", val)
+    match LLSDValue::parse(
+        b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>",
+    ) {
+        Err(e) => println!("Error as expected: {:?}", e),
+        Ok(val) => panic!("Bad input not detected: {:?}", val),
     }
     match LLSDValue::parse("String ending in emoji to check Unicode truncation. 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀".as_bytes()) {
         Err(e) => println!("Error as expected: {:?}",e),
