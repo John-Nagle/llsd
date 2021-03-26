@@ -107,6 +107,7 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
                 let keyprefix = &read_u8(cursor)?;           // key should begin with b'k';
                 match keyprefix {
                     b'k' => {
+                        println!("Map k found"); // ***TEMP***
                         let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
                         println!("Map key: {}", key);   // ***TEMP***
                         let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
