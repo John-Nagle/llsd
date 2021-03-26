@@ -104,8 +104,14 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
             let mut dict: HashMap<String, LLSDValue> = HashMap::new(); // accumulate hash here
             let count = read_u32(cursor)?; // number of items
             for _ in 0..count {
-                let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
-                let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
+                let keyprefix = &read_u8(cursor)?;           // key should begin with b'k';
+                match keyprefix {
+                    b'k' => {
+                        let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
+                        let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
+                    }
+                    _ => return Err(anyhow!("Binary LLSD map key had {:?} instead of expected 'k'", keyprefix)) 
+                }
             }
             if read_u8(cursor)? != b'}' {
                 return Err(anyhow!("Binary LLSD map did not end properly with }}"));
@@ -183,6 +189,7 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
             s.write(&(v.len() as u32).to_le_bytes())?;
             //  Output key/value pairs
             for (key, value) in v {
+                s.write(&[b'k'])?;   // k prefix to key. UNDOCUMENTED
                 s.write(&(key.len() as u32).to_le_bytes())?;
                 s.write(&key.as_bytes())?;
                 generate_value(s, value)?;
