@@ -29,7 +29,6 @@ pub fn parse_array(b: &[u8]) -> Result<LLSDValue, Error> {
 
 ///    Parse LLSD reader expressed in binary into an LLSDObject tree. No header.
 pub fn parse_read(cursor: &mut dyn Read) -> Result<LLSDValue, Error> {
-    ////let mut cursor: Cursor<&[u8]> = Cursor::new(b);
     parse_value(cursor)
 }
 
