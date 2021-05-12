@@ -17,9 +17,10 @@ pub mod xml;
 use std::collections::HashMap;
 use uuid;
 use anyhow::{anyhow, Error};
+use enum_as_inner::EnumAsInner;
 //
 ///  The primitive LLSD data item.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum LLSDValue {
     Undefined,
     Boolean(bool),
@@ -86,6 +87,10 @@ fn testllsdvalue() {
     println!("As XML:\n{}", test2xml);
     let test2value = LLSDValue::parse(test2xml.as_bytes()).unwrap();
     assert_eq!(test1, test2value);
+    //  Extract some fields using enum_as_inner mechanism.
+    ////assert_eq!(999, *test1map.as_map().unwrap().get("val2").unwrap().as_integer().unwrap());
+    assert_eq!(42, *test1.as_array().unwrap()[1].as_integer().unwrap());
+    assert_eq!(999, *test1.as_array().unwrap()[2].as_map().unwrap().get("val2").unwrap().as_integer().unwrap());
     //  Test error cases
     match LLSDValue::parse(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>") {
         Err(e) => println!("Error as expected: {:?}",e),

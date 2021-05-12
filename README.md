@@ -34,6 +34,15 @@ Unit tests pass. Not checked against Second Life and Open Simulator systems yet.
 
 - An array is a Rust Vec of LLSD values. 
 
+## Field access
+
+The **enum_as_inner** crate is used to derive access functions for each field type.
+So, given an LLSDValue llsdval which is expected to be an Integer,
+
+    let n = *llsdval.as_integer().unwrap();
+    
+will yield the integer value. 
+
 ## LLSD values in Rust
 
 These generally follow the conventions of the Rust crate "json".
