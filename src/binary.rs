@@ -21,46 +21,46 @@ use uuid;
 pub const LLSDBINARYPREFIX: &[u8] = b"<? LLSD/Binary ?>\n"; // binary LLSD prefix
 pub const LLSDBINARYSENTINEL: &[u8] = LLSDBINARYPREFIX; // prefix must match exactly
 
-///    Parse LLSD expressed in binary into an LLSDObject tree.
-pub fn parse(b: &[u8]) -> Result<LLSDValue, Error> {
+///    Parse LLSD array expressed in binary into an LLSDObject tree. No header.
+pub fn parse_array(b: &[u8]) -> Result<LLSDValue, Error> {
     let mut cursor: Cursor<&[u8]> = Cursor::new(b);
-    let mut prefixbuf: Vec<u8> = vec![0; LLSDBINARYPREFIX.len()];
-    cursor.read_exact(&mut prefixbuf)?;
-    if &prefixbuf[..] != LLSDBINARYPREFIX {
-        return Err(anyhow!("Binary LLSD has wrong header"));
-    };
     parse_value(&mut cursor)
 }
 
+///    Parse LLSD reader expressed in binary into an LLSDObject tree. No header.
+pub fn parse_read(cursor: &mut dyn Read) -> Result<LLSDValue, Error> {
+    parse_value(cursor)
+}
+
 /// Parse one value - real, integer, map, etc. Recursive.
-fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
+fn parse_value(cursor: &mut dyn Read) -> Result<LLSDValue, Error> {
     //  These could be generic if generics with numeric parameters were in stable Rust.
-    fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error> {
+    fn read_u8(cursor: &mut dyn Read) -> Result<u8, Error> {
         let mut b: [u8; 1] = [0; 1];
         cursor.read_exact(&mut b)?; // read one byte
         Ok(b[0])
     }
-    fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, Error> {
+    fn read_u32(cursor: &mut dyn Read) -> Result<u32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(u32::from_le_bytes(b))
+        Ok(u32::from_be_bytes(b))
     }
-    fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, Error> {
+    fn read_i32(cursor: &mut dyn Read) -> Result<i32, Error> {
         let mut b: [u8; 4] = [0; 4];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(i32::from_le_bytes(b))
+        Ok(i32::from_be_bytes(b))
     }
-    fn read_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, Error> {
+    fn read_i64(cursor: &mut dyn Read) -> Result<i64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(i64::from_le_bytes(b))
+        Ok(i64::from_be_bytes(b))
     }
-    fn read_f64(cursor: &mut Cursor<&[u8]>) -> Result<f64, Error> {
+    fn read_f64(cursor: &mut dyn Read) -> Result<f64, Error> {
         let mut b: [u8; 8] = [0; 8];
         cursor.read_exact(&mut b)?; // read one byte
-        Ok(f64::from_le_bytes(b))
+        Ok(f64::from_be_bytes(b))
     }
-    fn read_variable(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, Error> {
+    fn read_variable(cursor: &mut dyn Read) -> Result<Vec<u8>, Error> {
         let length = read_u32(cursor)?; // read length in bytes
         let mut buf = vec![0u8; length as usize];
         cursor.read(&mut buf)?;
@@ -101,8 +101,19 @@ fn parse_value(cursor: &mut Cursor<&[u8]>) -> Result<LLSDValue, Error> {
             let mut dict: HashMap<String, LLSDValue> = HashMap::new(); // accumulate hash here
             let count = read_u32(cursor)?; // number of items
             for _ in 0..count {
-                let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
-                let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
+                let keyprefix = &read_u8(cursor)?; // key should begin with b'k';
+                match keyprefix {
+                    b'k' => {
+                        let key = std::str::from_utf8(&read_variable(cursor)?)?.to_string();
+                        let _ = dict.insert(key, parse_value(cursor)?); // recurse and add, allowing dups
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Binary LLSD map key had {:?} instead of expected 'k'",
+                            keyprefix
+                        ))
+                    }
+                }
             }
             if read_u8(cursor)? != b'}' {
                 return Err(anyhow!("Binary LLSD map did not end properly with }}"));
@@ -143,21 +154,21 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         LLSDValue::Boolean(v) => s.write(if *v { b"1" } else { b"0" })?,
         LLSDValue::String(v) => {
             s.write(b"s")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(&v.as_bytes())?
         }
         LLSDValue::URI(v) => {
             s.write(b"l")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(v.as_bytes())?
         }
         LLSDValue::Integer(v) => {
             s.write(b"i")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
         LLSDValue::Real(v) => {
             s.write(b"r")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
         LLSDValue::UUID(v) => {
             s.write(b"u")?;
@@ -165,22 +176,23 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         }
         LLSDValue::Binary(v) => {
             s.write(b"b")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             s.write(v)?
         }
         LLSDValue::Date(v) => {
             s.write(b"d")?;
-            s.write(&v.to_le_bytes())?
+            s.write(&v.to_be_bytes())?
         }
 
         //  Map is { childcnt key value key value ... }
         LLSDValue::Map(v) => {
             //  Output count of key/value pairs
             s.write(b"{")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             //  Output key/value pairs
             for (key, value) in v {
-                s.write(&(key.len() as u32).to_le_bytes())?;
+                s.write(&[b'k'])?; // k prefix to key. UNDOCUMENTED
+                s.write(&(key.len() as u32).to_be_bytes())?;
                 s.write(&key.as_bytes())?;
                 generate_value(s, value)?;
             }
@@ -190,7 +202,7 @@ fn generate_value(s: &mut Vec<u8>, val: &LLSDValue) -> Result<(), Error> {
         LLSDValue::Array(v) => {
             //  Output count of array entries
             s.write(b"[")?;
-            s.write(&(v.len() as u32).to_le_bytes())?;
+            s.write(&(v.len() as u32).to_be_bytes())?;
             //  Output array entries
             for value in v {
                 generate_value(s, value)?;
@@ -222,7 +234,7 @@ fn binaryparsetest1() {
     //  Convert to binary form.
     let test1bin = to_bytes(&test1).unwrap();
     //  Convert back to value form.
-    let test1value = parse(&test1bin).unwrap();
+    let test1value = parse_array(&test1bin[LLSDBINARYSENTINEL.len()..]).unwrap();
     println!("Value after round-trip conversion: {:?}", test1value);
     //  Check that results match after round trip.
     assert_eq!(test1, test1value);

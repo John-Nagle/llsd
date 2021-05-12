@@ -14,9 +14,9 @@
 pub mod binary;
 pub mod xml;
 //
+use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use uuid;
-use anyhow::{anyhow, Error};
 use enum_as_inner::EnumAsInner;
 //
 ///  The primitive LLSD data item.
@@ -38,20 +38,35 @@ pub enum LLSDValue {
 //  Implementation
 
 impl LLSDValue {
-
     /// Parse LLSD, detecting format.
     pub fn parse(msg: &[u8]) -> Result<LLSDValue, Error> {
         //  Try binary first
-        if msg.len() >= binary::LLSDBINARYSENTINEL.len() &&
-            &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL {
-                return binary::parse(msg) }
-        //  Not binary, must be some text format.
+        if msg.len() >= binary::LLSDBINARYSENTINEL.len()
+            && &msg[0..binary::LLSDBINARYSENTINEL.len()] == binary::LLSDBINARYSENTINEL
+        {
+            return binary::parse_array(&msg[binary::LLSDBINARYSENTINEL.len()..]);
+        }
+        //  Check for binary without header. If array or map marker, parse.
+        if msg.len() > 1 {
+            match msg[0] {
+                // check first char
+                b'{' | b'[' => return binary::parse_array(msg),
+                _ => {}
+            }
+        }
+        //  No binary sentinel, try text format.
         let msgstring = std::str::from_utf8(msg)?; // convert to UTF-8 string
-        if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) { // try XML
-            return xml::parse(msgstring) }  
-        //  "Notation" syntax is not currently supported. 
+        if msgstring.trim_start().starts_with(xml::LLSDXMLSENTINEL) {
+            // try XML
+            return xml::parse(msgstring);
+        }
+        //  "Notation" syntax is not currently supported.
         //  Trim sring to N chars for error msg.
-        let snippet = msgstring.chars().zip(0..60).map(|(c,_)| c).collect::<String>();
+        let snippet = msgstring
+            .chars()
+            .zip(0..60)
+            .map(|(c, _)| c)
+            .collect::<String>();
         Err(anyhow!("LLSD format not recognized: {:?}", snippet))
     }
 }
@@ -92,9 +107,11 @@ fn testllsdvalue() {
     assert_eq!(42, *test1.as_array().unwrap()[1].as_integer().unwrap());
     assert_eq!(999, *test1.as_array().unwrap()[2].as_map().unwrap().get("val2").unwrap().as_integer().unwrap());
     //  Test error cases
-    match LLSDValue::parse(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>") {
-        Err(e) => println!("Error as expected: {:?}",e),
-        Ok(val) => panic!("Bad input not detected: {:?}", val)
+    match LLSDValue::parse(
+        b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd><complex>2i</complex></llsd>",
+    ) {
+        Err(e) => println!("Error as expected: {:?}", e),
+        Ok(val) => panic!("Bad input not detected: {:?}", val),
     }
     match LLSDValue::parse("String ending in emoji to check Unicode truncation. 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀".as_bytes()) {
         Err(e) => println!("Error as expected: {:?}",e),

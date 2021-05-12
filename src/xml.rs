@@ -27,9 +27,8 @@ use uuid;
 //  Constants
 //
 pub const LLSDXMLPREFIX: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<llsd>\n";
-pub const LLSDXMLSENTINEL: &str = "<?xml";  // Must begin with this.
+pub const LLSDXMLSENTINEL: &str = "<?xml"; // Must begin with this.
 const INDENT: usize = 4; // indent 4 spaces if asked
-
 
 ///    Parse LLSD expressed in XML into an LLSD tree.
 pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
@@ -51,7 +50,7 @@ pub fn parse(xmlstr: &str) -> Result<LLSDValue, Error> {
                         match reader.read_event(&mut buf2) {
                             Ok(Event::Start(ref e)) => {
                                 let tagname = std::str::from_utf8(e.name())?; // tag name as string to start parse
-                                //  This does all the real work.
+                                                                              //  This does all the real work.
                                 output = Some(parse_value(&mut reader, tagname, &e.attributes())?);
                             }
                             _ => {
@@ -241,11 +240,12 @@ fn parse_map(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     e
                 ))
             }
-            _ => {return Err(anyhow!(
+            _ => {
+                return Err(anyhow!(
                     "Unexpected parse event {:?} at position {} while parsing map",
                     event,
                     reader.buffer_position(),
-                    ))
+                ))
             }
         }
     }
@@ -302,7 +302,8 @@ fn parse_map_entry(reader: &mut Reader<&[u8]>) -> Result<(String, LLSDValue), Er
                     e
                 ))
             }
-            _ => {return Err(anyhow!(
+            _ => {
+                return Err(anyhow!(
                     "Unexpected parse event {:?} at position {} while parsing map entry",
                     event,
                     reader.buffer_position(),
@@ -353,7 +354,8 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<LLSDValue, Error> {
                     e
                 ))
             }
-            _ => {return Err(anyhow!(
+            _ => {
+                return Err(anyhow!(
                     "Unexpected parse event {:?} at position {} while parsing array",
                     event,
                     reader.buffer_position(),
@@ -421,7 +423,7 @@ fn get_attr<'a>(attrs: &'a Attributes, key: &[u8]) -> Result<Option<String>, Err
 /// Pretty prints out the value as XML. Indents by 4 spaces if requested.
 pub fn to_xml_string(val: &LLSDValue, do_indent: bool) -> Result<String, Error> {
     let mut s: Vec<u8> = Vec::new();
-    write!(s, "{}", LLSDXMLPREFIX)?;  // Standard XML prefix
+    write!(s, "{}", LLSDXMLPREFIX)?; // Standard XML prefix
     generate_value(&mut s, val, if do_indent { INDENT } else { 0 }, 0);
     write!(s, "</llsd>")?;
     s.flush()?;
